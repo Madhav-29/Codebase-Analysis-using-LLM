@@ -180,7 +180,8 @@ def analyze(repo: RepoOpt, output: Annotated[Path, typer.Option("--output")] = P
         token_budget={**s.budget.model_dump(), "input_limit": s.budget.input_limit},
         packing=s.packing.model_dump(), context_path=facts.context_path,
         usage=Usage(llm_calls=u.llm_calls, input_tokens=u.input_tokens, output_tokens=u.output_tokens,
-                    cache_hits=u.cache_hits),
+                    cache_hits=u.cache_hits, cached_input_tokens=u.cached_input_tokens,
+                    cached_output_tokens=u.cached_output_tokens),
         max_classes=max_classes,
     )
     findings = mo.findings + domain_findings + project_findings + det
@@ -196,6 +197,7 @@ def analyze(repo: RepoOpt, output: Annotated[Path, typer.Option("--output")] = P
     typer.echo(f"Files analyzed: {c.files_analyzed}/{len(facts.files)}  Classes summarized: {c.classes_summarized}/{c.classes_total}")
     typer.echo(f"Methods: {c.methods_total} total, {c.methods_described} described {c.methods_described_by_source}")
     typer.echo(f"Units: {c.units_total} (packed {len(c.packs)}, split {len(c.units_split)}, failed {len(c.units_failed)})")
+    typer.echo(f"Key methods: {len(result.key_methods)}")
     typer.echo(f"Endpoints: {len(result.endpoints)}  Findings: {len(result.findings)} (dropped {len(c.findings_dropped)})")
     typer.echo(f"LLM calls: {u.llm_calls}  cache hits: {u.cache_hits}  tokens in/out: {u.input_tokens:,}/{u.output_tokens:,}")
     for stage, st in u.per_stage.items():

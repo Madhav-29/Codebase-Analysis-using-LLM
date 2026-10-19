@@ -26,6 +26,7 @@ from .schema import (
     Evidence,
     FailedUnit,
     FindingOut,
+    KeyMethod,
     Metadata,
     MethodOut,
     PackRecord,
@@ -106,6 +107,43 @@ def deterministic_findings(facts: ProjectFacts, settings: Settings) -> list[Find
                     evidence=readme_evidence,
                     source="deterministic"))
     return findings
+
+
+# ------------------------------------------------------------------ key methods
+
+KEY_REASONS = {
+    "endpoint_handler": "handles a REST endpoint",
+    "service_api": "public method of a @Service class",
+    "data_access": "custom query logic in a @Repository class",
+    "complex": "cyclomatic complexity at or above the moderate threshold",
+}
+
+
+def key_methods(facts: ProjectFacts, classes: list[ClassOut], settings: Settings) -> list[KeyMethod]:
+    """Deterministic selection of the methods a reader should look at first. Trivial members never qualify."""
+    routes: dict[tuple[str, int], list[str]] = {}
+    for e in facts.endpoints:
+        routes.setdefault((e.controller, e.line), []).append(f"{e.http_method} {e.path}")
+    moderate = settings.complexity_thresholds["moderate"]
+    result = []
+    for c in classes:
+        stereotypes = {a.name for a in facts.types[c.fqn].decl.annotations}
+        for m in c.methods:
+            if m.trivial or not m.has_body:
+                continue
+            eps = routes.get((c.fqn, m.line_start), [])
+            public = "public" in m.modifiers
+            reasons = [r for r, hit in (
+                ("endpoint_handler", bool(eps)),
+                ("service_api", public and "Service" in stereotypes),
+                ("data_access", public and "Repository" in stereotypes),
+                ("complex", bool(m.complexity and m.complexity.cyclomatic >= moderate)),
+            ) if hit]
+            if reasons:
+                result.append(KeyMethod(id=m.id, class_fqn=c.fqn, signature=m.signature, description=m.description,
+                                        description_source=m.description_source, reasons=reasons, endpoints=eps,
+                                        cyclomatic=m.complexity.cyclomatic if m.complexity else None))
+    return result
 
 
 # ------------------------------------------------------------------ assembly
@@ -243,7 +281,7 @@ def build_output(*, facts: ProjectFacts, settings: Settings, selected: list[str]
     )
 
     output = AnalysisOutput(
-        metadata=metadata, project_overview=overview,
+        metadata=metadata, project_overview=overview, key_methods=key_methods(facts, classes, settings),
         endpoints=[EndpointOut(http_method=e.http_method, path=e.path, controller=e.controller,
                                handler_method=e.handler_method, file=e.file, line=e.line,
                                security=list(e.security), unresolved=e.unresolved) for e in facts.endpoints],

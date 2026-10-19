@@ -153,6 +153,15 @@ def run_map(facts: ProjectFacts, settings: Settings, runner: StructuredRunner, p
     return out
 
 
+def _unkey(text: str, unit: Unit) -> str:
+    """Replace prompt member keys (e.g. 'm8') the model echoed into prose with the method name."""
+    def name(m: re.Match) -> str:
+        member_id = unit.member_keys.get(m.group(0))
+        return f"{member_id.split('#', 1)[1].split('(', 1)[0]}()" if member_id else m.group(0)
+
+    return re.sub(r"\bm\d+\b", name, text)
+
+
 def _merge_unit(unit: Unit, resp: ClassUnitResponse, facts: ProjectFacts, out: MapOutput, skip_files: set[str]) -> None:
     member_text: dict[str, list[str]] = defaultdict(list)
     for cls in resp.classes:
@@ -167,14 +176,15 @@ def _merge_unit(unit: Unit, resp: ClassUnitResponse, facts: ProjectFacts, out: M
         else:
             existing.responsibilities += [r for r in cls.responsibilities if r not in existing.responsibilities]
         for m in cls.methods:
-            member_text[unit.member_keys[m.member_key]].append(m.description)
+            member_text[unit.member_keys[m.member_key]].append(_unkey(m.description, unit))
         for f in cls.findings:
             if not (1 <= f.line_start <= f.line_end <= tf.file.line_count):
                 out.dropped_findings.append(
                     f"{fqn}: '{f.title}' cited lines {f.line_start}-{f.line_end} outside file (1-{tf.file.line_count})")
                 continue
             out.findings.append(FindingOut(
-                category=f.category, severity=f.severity, title=f.title, detail=f.detail, scope=fqn,
+                category=f.category, severity=f.severity, title=_unkey(f.title, unit), detail=_unkey(f.detail, unit),
+                scope=fqn,
                 evidence=[Evidence(file=tf.file.path, line_start=f.line_start, line_end=f.line_end)], source="llm"))
     for member_id, texts in member_text.items():
         if member_id in unit.segmented_members:

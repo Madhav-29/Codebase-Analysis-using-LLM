@@ -176,11 +176,26 @@ Bands (`complexity_thresholds`): **low** CC 1–5, **moderate** 6–10, **high**
   | Auth / permission / unknown model | Fails fast. |
 
 - **Invalid output.** A response that is unparseable or fails local validation (wrong keys, a missing method, a missing class) is re-sent up to 3 times with the validation error appended. After that it's reported in `coverage.units_failed`, and the affected methods get `description_source: "failed"`. Nothing is fabricated.
-- **Reproducibility.** Temperature 0, versioned prompts, a deterministic plan, and the commit SHA in metadata. Temperature 0 doesn't make an LLM bit-for-bit deterministic, so exact replay comes from the cache: re-running with the same cache reproduces the same JSON content.
+- **Reproducibility.** Versioned prompts, a deterministic plan, the commit SHA and the *applied* temperature in metadata (temperature 0 where the model accepts it). Sampling settings don't make an LLM bit-for-bit deterministic anyway, so exact replay comes from the cache: re-running with the same cache reproduces the same JSON content.
 
 ## Model choice
 
-Gemini 3.8 Flash (`gemini-3.8-flash`) on the Gemini API free tier. It's cheap and fast, supports native JSON-schema structured output, and is more than capable of describing small, idiomatic Spring classes. The full run needs ~120 calls, which fits a free-tier daily quota. The model is configuration (`LLM_MODEL`, `--model`), and the provider is too (`LLM_PROVIDER`). Changing either invalidates the cache automatically.
+**Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`) on the Gemini API free tier.**
+
+The plan was Gemini 3.8 Flash. Its free tier turned out to allow only **20 requests per day**: the second smoke run got `429 RESOURCE_EXHAUSTED … limit: 20`. The full analysis needs ~120 calls, so it switched to Flash-Lite, which has a separate free-tier quota.
+
+Comparison on the same 5 smoke-test classes:
+
+| | 3.8 Flash | 3.5 Flash-Lite |
+|---|---|---|
+| Method descriptions correct | 6/6 | 6/6 (1 omits a step: `userLogin` doesn't mention `securityService.authenticateToken`) |
+| Class-level findings | 6 (4 valid: locale-sensitive `toLowerCase()`, missing `@Valid` on the login body, constants class without a private constructor, redundant `toCollectionModel` override) | 0 |
+
+Descriptions are about as accurate, but Flash-Lite reviews much less deeply, so the findings in `analysis.json` are sparse. A paid tier with a stronger model is the obvious upgrade.
+
+The model is configuration (`LLM_MODEL`, `--model`), and the provider is too (`LLM_PROVIDER`). Changing either invalidates the cache automatically.
+
+**Temperature.** Temperature 0 is the configured default and is sent to models that accept it. Gemini 3.5 Flash-Lite uses fixed sampling and ignores temperature (langchain-google-genai drops it with a warning). So the analyzer doesn't send it to that model, and the metadata records `temperature: null` with a `temperature_note`, not a value that wasn't applied.
 
 ## Assumptions
 

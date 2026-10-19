@@ -618,6 +618,75 @@
       "title": "FindingOut",
       "type": "object"
     },
+    "KeyMethod": {
+      "description": "Index entry for a method that matters to a reader; full facts are under classes[].methods[] by id.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "class_fqn": {
+          "title": "Class Fqn",
+          "type": "string"
+        },
+        "signature": {
+          "title": "Signature",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description"
+        },
+        "description_source": {
+          "title": "Description Source",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        },
+        "endpoints": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Endpoints",
+          "type": "array"
+        },
+        "cyclomatic": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cyclomatic"
+        }
+      },
+      "required": [
+        "id",
+        "class_fqn",
+        "signature",
+        "description",
+        "description_source",
+        "reasons",
+        "endpoints",
+        "cyclomatic"
+      ],
+      "title": "KeyMethod",
+      "type": "object"
+    },
     "Metadata": {
       "properties": {
         "repo_url": {
@@ -664,8 +733,26 @@
           "type": "string"
         },
         "temperature": {
-          "title": "Temperature",
-          "type": "number"
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Temperature"
+        },
+        "temperature_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Temperature Note"
         },
         "token_budget": {
           "additionalProperties": true,
@@ -704,6 +791,7 @@
         "provider",
         "model",
         "temperature",
+        "temperature_note",
         "token_budget",
         "packing",
         "context_path",
@@ -1010,6 +1098,7 @@
       "type": "object"
     },
     "Usage": {
+      "description": "llm_calls/input_tokens/output_tokens are live calls in this run; cache_hits were replayed from the\nresponse cache, and cached_*_tokens is what those responses cost when they were originally produced.",
       "properties": {
         "llm_calls": {
           "default": 0,
@@ -1030,6 +1119,16 @@
           "default": 0,
           "title": "Cache Hits",
           "type": "integer"
+        },
+        "cached_input_tokens": {
+          "default": 0,
+          "title": "Cached Input Tokens",
+          "type": "integer"
+        },
+        "cached_output_tokens": {
+          "default": 0,
+          "title": "Cached Output Tokens",
+          "type": "integer"
         }
       },
       "title": "Usage",
@@ -1042,6 +1141,13 @@
     },
     "project_overview": {
       "$ref": "#/$defs/ProjectOverview"
+    },
+    "key_methods": {
+      "items": {
+        "$ref": "#/$defs/KeyMethod"
+      },
+      "title": "Key Methods",
+      "type": "array"
     },
     "endpoints": {
       "items": {
@@ -1081,6 +1187,7 @@
   "required": [
     "metadata",
     "project_overview",
+    "key_methods",
     "endpoints",
     "domains",
     "classes",

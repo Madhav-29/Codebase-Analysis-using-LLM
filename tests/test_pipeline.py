@@ -140,3 +140,32 @@ def test_llm_finding_duplicating_a_deterministic_one_is_dropped_and_recorded():
     kept = drop_duplicates_of(det, [f("documentation_mismatch", "README.md", "llm"), f("security", "README.md", "llm")],
                               dropped)
     assert [k.category for k in kept] == ["security"] and len(dropped) == 1
+
+
+def test_key_methods_index_endpoint_handlers_and_skips_trivial_members(make_repo, fixture_source):
+    _, out, _ = _run(make_repo, fixture_source)
+    keys = {k.signature.split("(")[0].rsplit(" ", 1)[-1]: k for k in out.key_methods}
+    assert "endpoint_handler" in keys["list"].reasons
+    assert set(keys["list"].endpoints) == {"GET /api/orders", "GET /api/orders/all"}
+    assert "getOrderService" not in keys  # trivial getter
+    ids = {m.id for c in out.classes for m in c.methods}
+    assert all(k.id in ids for k in out.key_methods)
+
+
+def test_prompt_member_keys_never_leak_into_output(make_repo, fixture_source):
+    import re
+
+    def responder(schema, user, n):
+        payload = smart_responder(schema, user, n)
+        if schema is ClassUnitResponse:
+            for cls in payload["classes"]:
+                if cls["methods"]:
+                    key = cls["methods"][0]["member_key"]
+                    cls["findings"][0]["detail"] = f"In method {key}, the input is not validated."
+                    cls["methods"][0]["description"] = f"Like {key}, returns orders."
+        return payload
+
+    _, out, _ = _run(make_repo, fixture_source, responder)
+    texts = [f.detail for f in out.findings] + [m.description or "" for c in out.classes for m in c.methods]
+    assert not any(re.search(r"\bm\d+\b", t) for t in texts)
+    assert any(re.search(r"In method \w+\(\), the input", t) for t in texts)

@@ -132,6 +132,8 @@ class UsageTotals:
     input_tokens: int = 0
     output_tokens: int = 0
     cache_hits: int = 0
+    cached_input_tokens: int = 0  # tokens originally spent producing the responses replayed from cache
+    cached_output_tokens: int = 0
     failures: int = 0
     per_stage: dict[str, dict[str, int]] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
@@ -149,9 +151,11 @@ class UsageTotals:
             s["input_tokens"] += inp
             s["output_tokens"] += out
 
-    def add_cache_hit(self, stage: str) -> None:
+    def add_cache_hit(self, stage: str, usage: dict[str, int]) -> None:
         with self._lock:
             self.cache_hits += 1
+            self.cached_input_tokens += usage.get("input_tokens", 0)
+            self.cached_output_tokens += usage.get("output_tokens", 0)
             self._stage(stage)["cache_hits"] += 1
 
     def add_failure(self) -> None:
@@ -191,7 +195,7 @@ class StructuredRunner:
             try:
                 parsed = req.schema.model_validate(hit["parsed"])
                 self._validate(req, parsed)
-                self.usage.add_cache_hit(stage)
+                self.usage.add_cache_hit(stage, hit.get("usage", {}))
                 return LLMResult(req.id, parsed, None, 0, True)
             except (ValidationError, ValueError) as exc:
                 log.warning("ignoring invalid cache entry for %s: %s", req.id, exc)

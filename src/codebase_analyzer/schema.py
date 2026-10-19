@@ -88,10 +88,15 @@ class ProjectResponse(BaseModel):
 # ---------------------------------------------------------------- final output
 
 class Usage(BaseModel):
+    """llm_calls/input_tokens/output_tokens are live calls in this run; cache_hits were replayed from the
+    response cache, and cached_*_tokens is what those responses cost when they were originally produced."""
+
     llm_calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
     cache_hits: int = 0
+    cached_input_tokens: int = 0
+    cached_output_tokens: int = 0
 
 
 class Metadata(BaseModel):
@@ -196,6 +201,19 @@ class ClassOut(BaseModel):
     methods: list[MethodOut]
 
 
+class KeyMethod(BaseModel):
+    """Index entry for a method that matters to a reader; full facts are under classes[].methods[] by id."""
+
+    id: str
+    class_fqn: str
+    signature: str
+    description: str | None
+    description_source: str
+    reasons: list[str]  # endpoint_handler | service_api | data_access | complex
+    endpoints: list[str]  # "GET /api/v1/actors/{id}" for handlers
+    cyclomatic: int | None
+
+
 class ComplexMethodRef(BaseModel):
     id: str
     cyclomatic: int
@@ -278,6 +296,7 @@ class Coverage(BaseModel):
 class AnalysisOutput(BaseModel):
     metadata: Metadata
     project_overview: ProjectOverview
+    key_methods: list[KeyMethod]
     endpoints: list[EndpointOut]
     domains: list[DomainOut]
     classes: list[ClassOut]
