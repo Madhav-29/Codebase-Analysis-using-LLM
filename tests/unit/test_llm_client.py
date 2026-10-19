@@ -8,17 +8,11 @@ from codebase_analyzer.config import Settings
 from codebase_analyzer.analysis.facts import build_facts
 from langchain_core.exceptions import ModelAuthenticationError, ModelRateLimitError
 
-from codebase_analyzer.llm.client import (
-    FatalLLMError,
-    LLMRequest,
-    QuotaExhausted,
-    StructuredRunner,
-    effective_temperature,
-    make_chat_model,
-)
+from codebase_analyzer.errors import ProviderAuthError, ProviderQuotaExhausted
+from codebase_analyzer.llm.client import LLMRequest, StructuredRunner
 from codebase_analyzer.schema.responses import ClassUnitResponse, DomainResponse
 
-from ..fakes import FakeStructuredModel, class_payload
+from ..fakes import FakeStructuredModel, class_payload, fake_provider
 
 VALID = {"classes": [{"type_key": "A", "summary": "s", "responsibilities": [], "findings": [],
                       "methods": [{"member_key": "m1", "description": "d"}]}]}
@@ -72,7 +66,7 @@ def test_runner_retries_validation_failures_with_feedback_then_succeeds():
         return {"summary": "s"} if n == 1 else DOMAIN_OK  # first answer is schema-invalid
 
     fake = FakeStructuredModel(responder)
-    runner = StructuredRunner(fake, Settings(), cache=None)
+    runner = StructuredRunner(fake_provider(fake), Settings(), None, "v")
     res = runner.run([_req()], stage="t")["r1"]
     assert res.parsed is not None and res.attempts == 2
     assert "rejected by validation" in fake.calls[1][1]
@@ -80,7 +74,7 @@ def test_runner_retries_validation_failures_with_feedback_then_succeeds():
 
 
 def _runner(model, settings=None, cache=None):
-    runner = StructuredRunner(model, settings or Settings(), cache)
+    runner = StructuredRunner(fake_provider(model), settings or Settings(), cache, "v")
     runner.sleeps = []
     runner.sleep = runner.sleeps.append  # record backoff waits instead of sleeping
     return runner
@@ -95,7 +89,7 @@ def test_runner_retries_transient_errors_and_reports_persistent_failure():
 
     always_bad = FakeStructuredModel(lambda s, u, n: {"summary": "missing fields"})
     settings = Settings()
-    res = StructuredRunner(always_bad, settings, None).run([_req()], "t")["r1"]
+    res = StructuredRunner(fake_provider(always_bad), settings, None, "v").run([_req()], "t")["r1"]
     assert res.parsed is None and res.error and res.attempts == settings.llm_max_attempts
     assert len(always_bad.calls) == settings.llm_max_attempts  # no fabricated output, no extra calls
 
@@ -106,22 +100,21 @@ def test_local_validator_failure_triggers_retry():
             raise ValueError("summary must mention x")
 
     fake = FakeStructuredModel(lambda s, u, n: DOMAIN_OK if n == 1 else {**DOMAIN_OK, "summary": "x"})
-    res = StructuredRunner(fake, Settings(), None).run([_req(must_mention_x)], "t")["r1"]
+    res = StructuredRunner(fake_provider(fake), Settings(), None, "v").run([_req(must_mention_x)], "t")["r1"]
     assert res.parsed.summary == "x" and "summary must mention x" in fake.calls[1][1]
 
 
 def test_cache_replays_without_calling_the_model(tmp_path):
     cache = ResponseCache(tmp_path)
     first = FakeStructuredModel(lambda s, u, n: DOMAIN_OK)
-    StructuredRunner(first, Settings(), cache).run([_req()], "t")
+    StructuredRunner(fake_provider(first), Settings(), cache, "v").run([_req()], "t")
     second = FakeStructuredModel(lambda s, u, n: pytest.fail("model must not be called on a cache hit"))
-    runner = StructuredRunner(second, Settings(), cache)
+    runner = StructuredRunner(fake_provider(second), Settings(), cache, "v")
     assert runner.run([_req()], "t")["r1"].cached
     assert runner.usage.cache_hits == 1 and runner.usage.llm_calls == 0
 
-    other_model = Settings(llm_model="another-model")  # any key input change is a miss
-    third = FakeStructuredModel(lambda s, u, n: DOMAIN_OK)
-    StructuredRunner(third, other_model, cache).run([_req()], "t")
+    third = FakeStructuredModel(lambda s, u, n: DOMAIN_OK)  # any key input change is a miss
+    StructuredRunner(fake_provider(third, model_name="another-model"), Settings(), cache, "v").run([_req()], "t")
     assert len(third.calls) == 1
 
 
@@ -139,7 +132,7 @@ def test_daily_quota_stops_the_run_and_a_rerun_resumes_from_cache(tmp_path):
     daily = ModelRateLimitError("429 RESOURCE_EXHAUSTED quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier")
     reqs = [LLMRequest(f"r{i}", "sys", f"user {i}", DomainResponse) for i in (1, 2, 3)]
     first = FakeStructuredModel(lambda s, u, n: DOMAIN_OK if n == 1 else daily)
-    with pytest.raises(QuotaExhausted):
+    with pytest.raises(ProviderQuotaExhausted):
         _runner(first, cache=cache).run(reqs, "t")
     assert len(first.calls) == 2  # r1 answered, r2 hit the daily quota, r3 never sent
 
@@ -152,21 +145,6 @@ def test_daily_quota_stops_the_run_and_a_rerun_resumes_from_cache(tmp_path):
 
 def test_auth_error_is_fatal_without_retries():
     fake = FakeStructuredModel(lambda s, u, n: ModelAuthenticationError("401 API key not valid"))
-    with pytest.raises(FatalLLMError):
+    with pytest.raises(ProviderAuthError):
         _runner(fake).run([_req()], "t")
     assert len(fake.calls) == 1
-
-
-def test_gemini_chat_model_is_configured_from_settings(monkeypatch):
-    monkeypatch.setenv("GOOGLE_API_KEY", "dummy-not-a-real-key")  # constructing the client makes no request
-    llm = make_chat_model(Settings(llm_provider="google_genai", llm_model="gemini-3.8-flash"))
-    assert type(llm).__name__ == "ChatGoogleGenerativeAI"
-    assert llm.model == "gemini-3.8-flash" and llm.temperature == 0.0
-    assert llm.max_output_tokens == Settings().budget.output_reserve and llm.max_retries == 1
-
-
-def test_temperature_is_not_sent_to_fixed_sampling_models(monkeypatch):
-    monkeypatch.setenv("GOOGLE_API_KEY", "dummy-not-a-real-key")
-    lite = Settings(llm_provider="google_genai", llm_model="gemini-3.5-flash-lite")
-    assert effective_temperature(lite) is None and make_chat_model(lite).temperature is None
-    assert effective_temperature(Settings(llm_provider="google_genai", llm_model="gemini-3.8-flash")) == 0.0

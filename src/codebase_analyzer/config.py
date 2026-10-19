@@ -1,8 +1,8 @@
-"""Runtime settings.
+"""Runtime settings, validated once at startup.
 
-All values can be overridden through environment variables (or `.env`) and most
-through CLI flags. API keys are read by the provider SDKs from the environment;
-they are never stored in settings or written to output.
+Values come from (highest first) CLI flags, environment variables, `.env`, then
+the defaults below. API keys are deliberately not settings: provider modules
+read them from the environment, so they never reach logs, metadata or output.
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     llm_provider: Literal["google_genai", "anthropic"] = "google_genai"
     llm_model: str = "gemini-3.5-flash-lite"
     llm_temperature: float = 0.0
-    llm_concurrency: int = 1  # free-tier friendly; raise on a paid tier
+    llm_concurrency: int | None = None  # None: the provider's default (see llm/providers)
     llm_max_attempts: int = 3  # per request, for unparseable or locally invalid output
     llm_backoff_initial_s: float = 10.0  # rate-limit/server-error backoff, doubled each retry
     llm_backoff_max_s: float = 120.0

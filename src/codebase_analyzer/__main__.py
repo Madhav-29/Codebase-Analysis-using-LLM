@@ -1,3 +1,3 @@
-from codebase_analyzer.cli import app
+from codebase_analyzer.cli import main
 
-app()
+main()

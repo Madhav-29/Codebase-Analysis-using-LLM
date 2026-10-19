@@ -2,17 +2,16 @@
 
 import pytest
 
-from codebase_analyzer.analysis.checks import deterministic_findings
-from codebase_analyzer.pipeline.assemble import CoverageError, build_output, verify_coverage
-from codebase_analyzer.pipeline.map_stage import run_map, select_paths
-from codebase_analyzer.pipeline.reduce_stage import run_domain_reduce, run_project_reduce
-from codebase_analyzer.config import Settings
 from codebase_analyzer.analysis.facts import build_facts
+from codebase_analyzer.config import Settings
+from codebase_analyzer.errors import CoverageError
 from codebase_analyzer.llm.client import StructuredRunner
-from codebase_analyzer.schema.output import Metadata, Usage
+from codebase_analyzer.pipeline.assemble import verify_coverage
+from codebase_analyzer.pipeline.map_stage import select_paths
+from codebase_analyzer.pipeline.run import run_analysis
 from codebase_analyzer.schema.responses import ClassUnitResponse
 
-from ..fakes import FakeStructuredModel, class_payload, smart_responder
+from ..fakes import FakeStructuredModel, class_payload, fake_provider, smart_responder
 
 FILES = {
     "com/acme/shop/order/controller/OrderController.java": None,  # filled from fixture
@@ -30,18 +29,9 @@ def _run(make_repo, fixture_source, responder=smart_responder, max_classes=None)
     files["com/acme/shop/order/controller/OrderController.java"] = fixture_source("OrderController.java")
     settings = Settings()
     facts = build_facts(make_repo(files, context_path="/api"), settings)
-    selected = select_paths(facts, max_classes)
     fake = FakeStructuredModel(responder)
-    runner = StructuredRunner(fake, settings, cache=None)
-    mo = run_map(facts, settings, runner, selected)
-    domains, dfind = run_domain_reduce(facts, settings, runner, mo)
-    det = deterministic_findings(facts, settings)
-    project, pfind = run_project_reduce(facts, settings, runner, mo, domains, det)
-    meta = Metadata(repo_url=None, commit_sha=None, analyzed_at="t", prompt_version="v", provider="fake",
-                    model="fake", temperature=0.0, temperature_note=None, token_budget={}, packing={}, context_path=facts.context_path,
-                    usage=Usage(), max_classes=max_classes)
-    out = build_output(facts=facts, settings=settings, selected=selected, mo=mo, domains=domains, project=project,
-                       findings=mo.findings + dfind + pfind + det, metadata=meta)
+    runner = StructuredRunner(fake_provider(fake), settings, None, "v")
+    out = run_analysis(facts, settings, runner, selected=select_paths(facts, max_classes), max_classes=max_classes)
     return facts, out, fake
 
 

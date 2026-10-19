@@ -13,6 +13,7 @@ from codebase_analyzer.analysis.facts import ProjectFacts
 from codebase_analyzer.analysis.key_methods import select_key_methods
 from codebase_analyzer.analysis.metrics import complexity_band
 from codebase_analyzer.config import Settings
+from codebase_analyzer.errors import CoverageError
 from codebase_analyzer.pipeline.map_stage import MapOutput
 from codebase_analyzer.pipeline.reduce_stage import ReduceResult
 from codebase_analyzer.schema.output import (
@@ -35,10 +36,6 @@ from codebase_analyzer.schema.output import (
     SkippedFile,
     SplitRecord,
 )
-
-
-class CoverageError(AssertionError):
-    pass
 
 
 # ------------------------------------------------------------------ assembly

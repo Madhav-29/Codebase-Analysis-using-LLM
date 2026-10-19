@@ -23,7 +23,7 @@ anthropic = [
 ]
 
 [project.scripts]
-codebase-analyzer = "codebase_analyzer.cli:app"
+codebase-analyzer = "codebase_analyzer.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]

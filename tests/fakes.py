@@ -1,8 +1,8 @@
 """A fake chat model with LangChain's structured-output contract (no network).
 
-`with_structured_output(schema, method=..., include_raw=True)` returns a
+`with_structured_output(schema, include_raw=True, method=...)` returns a
 Runnable whose output is {"raw": AIMessage, "parsed": schema | None,
-"parsing_error": Exception | None}, the same contract as ChatGoogleGenerativeAI.
+"parsing_error": Exception | None}, the same contract as LangChain's chat models.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 from pydantic import ValidationError
 
+from codebase_analyzer.llm.providers import Provider
 from codebase_analyzer.schema.responses import ClassUnitResponse, DomainResponse, ProjectResponse
 
 TYPE_LINE = re.compile(r"^- (\S+) \((\w+), lines (\d+)-(\d+)\)$", re.M)
@@ -25,8 +26,9 @@ class FakeStructuredModel:
         self.responder = responder or smart_responder
         self.calls: list[tuple[type, str]] = []
 
-    def with_structured_output(self, schema, method="json_schema", include_raw=False):
+    def with_structured_output(self, schema, *, include_raw=False, method="json_schema", **kwargs):
         assert method == "json_schema" and include_raw
+        self.structured_kwargs = kwargs
 
         def call(messages):
             user = messages[-1].content
@@ -42,6 +44,14 @@ class FakeStructuredModel:
                 return {"raw": raw, "parsed": None, "parsing_error": exc}
 
         return RunnableLambda(call)
+
+    def get_num_tokens(self, text):
+        return len(text) // 4
+
+
+def fake_provider(model, *, model_name="fake-model", concurrency=1, **structured_output):
+    return Provider(name="fake", model=model_name, chat_model=model, temperature=0.0, temperature_note=None,
+                    concurrency=concurrency, structured_output={"method": "json_schema", **structured_output})
 
 
 def class_payload(user: str, drop_types: set[str] = frozenset(), drop_members: set[str] = frozenset()) -> dict:

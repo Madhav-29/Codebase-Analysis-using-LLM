@@ -15,14 +15,12 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from codebase_analyzer.prompts import PROMPT_VERSION
 
-
-def cache_key(*, provider: str, model: str, temperature: float | None,
+def cache_key(*, prompt_version: str, provider: str, model: str, temperature: float | None,
               schema: type[BaseModel], system: str, user: str) -> str:
     payload = json.dumps(
         {
-            "prompt_version": PROMPT_VERSION,
+            "prompt_version": prompt_version,
             "provider": provider,
             "model": model,
             "temperature": temperature,
