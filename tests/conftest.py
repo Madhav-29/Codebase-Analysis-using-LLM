@@ -5,7 +5,7 @@ import pytest
 
 from codebase_analyzer.config import Settings
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent / "fixtures" / "java"
 PROVIDER_ENV_PREFIXES = ("LLM_", "AZURE_", "GOOGLE_", "GEMINI_", "ANTHROPIC_", "OPENAI_")
 
 

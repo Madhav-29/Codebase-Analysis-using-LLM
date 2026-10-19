@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .java_parser import JavaFile, Member, TypeDecl
+from codebase_analyzer.analysis.java_parser import JavaFile, Member, TypeDecl
 
 _GETTER = re.compile(r"^\{\s*return\s+(?:this\.)?(\w+)\s*;\s*\}$")
 _SETTER = re.compile(r"^\{\s*(?:this\.)?(\w+)\s*=\s*(\w+)\s*;\s*\}$")

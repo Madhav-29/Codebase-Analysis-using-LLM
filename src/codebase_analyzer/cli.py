@@ -19,15 +19,15 @@ from typing import Annotated, Optional
 import typer
 from dotenv import load_dotenv
 
-from .analyze import run_domain_reduce, run_map, run_project_reduce, select_paths
-from .assemble import build_output, deterministic_findings, verify_coverage
-from .cache import ResponseCache
-from .chunking import Plan, plan_units
-from .config import Settings, TokenBudget
-from .facts import ProjectFacts, build_facts
-from .llm import FatalLLMError, QuotaExhausted, StructuredRunner, effective_temperature, make_chat_model
-from .prompts import CLASS_SYSTEM, PROMPT_VERSION
-from .schema import AnalysisOutput, Metadata, Usage
+from codebase_analyzer.pipeline.map_stage import run_domain_reduce, run_map, run_project_reduce, select_paths
+from codebase_analyzer.pipeline.assemble import build_output, deterministic_findings, verify_coverage
+from codebase_analyzer.llm.cache import ResponseCache
+from codebase_analyzer.planning.chunking import Plan, plan_units
+from codebase_analyzer.config import Settings, TokenBudget
+from codebase_analyzer.analysis.facts import ProjectFacts, build_facts
+from codebase_analyzer.llm.client import FatalLLMError, QuotaExhausted, StructuredRunner, effective_temperature, make_chat_model
+from codebase_analyzer.prompts import CLASS_SYSTEM, PROMPT_VERSION
+from codebase_analyzer.schema.output import AnalysisOutput, Metadata, Usage
 
 app = typer.Typer(add_completion=False, help="LLM-powered structured knowledge extraction for Java/Spring repositories.")
 log = logging.getLogger("codebase_analyzer")
@@ -122,7 +122,7 @@ def estimate(repo: RepoOpt, provider: ProviderOpt = None, model: ModelOpt = None
     typer.echo(f"Repository: {root} @ {sha}")
     _print_plan(facts, s, selected, plan)
     if native_count:
-        from .tokens import count_native
+        from codebase_analyzer.planning.tokens import count_native
 
         llm = make_chat_model(s)
         pairs = [(u.est_tokens, count_native(llm, CLASS_SYSTEM + "\n" + u.user_text)) for u in plan.units]

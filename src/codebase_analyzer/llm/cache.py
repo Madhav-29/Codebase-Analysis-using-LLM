@@ -15,7 +15,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from .prompts import PROMPT_VERSION
+from codebase_analyzer.prompts import PROMPT_VERSION
 
 
 def cache_key(*, provider: str, model: str, temperature: float | None,

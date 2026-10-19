@@ -1,5 +1,5 @@
-from codebase_analyzer.java_parser import parse_java
-from codebase_analyzer.metrics import complexity_band, member_complexity
+from codebase_analyzer.analysis.java_parser import parse_java
+from codebase_analyzer.analysis.metrics import complexity_band, member_complexity
 
 
 def test_metrics_join_is_per_member_even_where_file_level_lizard_fails(fixture_source):

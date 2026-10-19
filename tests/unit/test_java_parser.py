@@ -1,4 +1,4 @@
-from codebase_analyzer.java_parser import parse_java
+from codebase_analyzer.analysis.java_parser import parse_java
 
 
 def _members(jf, type_name):

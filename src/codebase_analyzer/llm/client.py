@@ -44,8 +44,8 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
 
-from .cache import ResponseCache, cache_key
-from .config import Settings
+from codebase_analyzer.llm.cache import ResponseCache, cache_key
+from codebase_analyzer.config import Settings
 
 log = logging.getLogger(__name__)
 

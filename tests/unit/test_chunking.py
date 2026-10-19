@@ -1,6 +1,6 @@
-from codebase_analyzer.chunking import plan_units
+from codebase_analyzer.planning.chunking import plan_units
 from codebase_analyzer.config import Settings, TokenBudget
-from codebase_analyzer.facts import build_facts
+from codebase_analyzer.analysis.facts import build_facts
 
 SEPARATOR = "\n    ...\n"  # between the skeleton and the member bodies of a split part
 

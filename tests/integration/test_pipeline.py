@@ -2,14 +2,14 @@
 
 import pytest
 
-from codebase_analyzer.analyze import run_domain_reduce, run_map, run_project_reduce, select_paths
-from codebase_analyzer.assemble import CoverageError, build_output, deterministic_findings, verify_coverage
+from codebase_analyzer.pipeline.map_stage import run_domain_reduce, run_map, run_project_reduce, select_paths
+from codebase_analyzer.pipeline.assemble import CoverageError, build_output, deterministic_findings, verify_coverage
 from codebase_analyzer.config import Settings
-from codebase_analyzer.facts import build_facts
-from codebase_analyzer.llm import StructuredRunner
-from codebase_analyzer.schema import ClassUnitResponse, Metadata, Usage
+from codebase_analyzer.analysis.facts import build_facts
+from codebase_analyzer.llm.client import StructuredRunner
+from codebase_analyzer.schema.output import ClassUnitResponse, Metadata, Usage
 
-from .fakes import FakeStructuredModel, class_payload, smart_responder
+from ..fakes import FakeStructuredModel, class_payload, smart_responder
 
 FILES = {
     "com/acme/shop/order/controller/OrderController.java": None,  # filled from fixture
@@ -105,7 +105,7 @@ def test_coverage_check_fails_loudly_when_a_method_is_missing(make_repo, fixture
 
 
 def test_secret_values_are_masked_before_reaching_the_llm():
-    from codebase_analyzer.analyze import mask_secrets
+    from codebase_analyzer.pipeline.map_stage import mask_secrets
 
     text = "app:\n  jwt:\n    signing-key: c2VjcmV0LXZhbHVl\n  datasource:\n    password: hunter2\n  host: localhost\n"
     masked = mask_secrets(text)
@@ -114,8 +114,8 @@ def test_secret_values_are_masked_before_reaching_the_llm():
 
 
 def test_reduce_evidence_must_cite_real_lines_of_input_files():
-    from codebase_analyzer.analyze import _reduce_findings
-    from codebase_analyzer.schema import LLMEvidence, LLMReducedFinding
+    from codebase_analyzer.pipeline.map_stage import _reduce_findings
+    from codebase_analyzer.schema.output import LLMEvidence, LLMReducedFinding
 
     def finding(file, start, end):
         return LLMReducedFinding(category="security", severity="low", title=f"{file}:{start}", detail="d",
@@ -128,8 +128,8 @@ def test_reduce_evidence_must_cite_real_lines_of_input_files():
 
 
 def test_llm_finding_duplicating_a_deterministic_one_is_dropped_and_recorded():
-    from codebase_analyzer.analyze import drop_duplicates_of
-    from codebase_analyzer.schema import Evidence, FindingOut
+    from codebase_analyzer.pipeline.map_stage import drop_duplicates_of
+    from codebase_analyzer.schema.output import Evidence, FindingOut
 
     def f(category, file, source):
         return FindingOut(category=category, severity="low", title=f"{category}@{file}", detail="d", scope="project",

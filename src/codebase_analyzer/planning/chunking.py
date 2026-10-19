@@ -22,9 +22,9 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .config import Settings
-from .facts import MemberFact, ProjectFacts, TypeFact
-from .prompts import (
+from codebase_analyzer.config import Settings
+from codebase_analyzer.analysis.facts import MemberFact, ProjectFacts, TypeFact
+from codebase_analyzer.prompts import (
     CLASS_SYSTEM,
     ClassPrompt,
     CodeBlock,
@@ -33,8 +33,8 @@ from .prompts import (
     number_lines,
     render_class_prompt,
 )
-from .schema import ClassUnitResponse
-from .tokens import estimate_tokens
+from codebase_analyzer.schema.output import ClassUnitResponse
+from codebase_analyzer.planning.tokens import estimate_tokens
 
 MIN_PART_TOKENS = 400  # below this, a split part cannot hold meaningful code
 

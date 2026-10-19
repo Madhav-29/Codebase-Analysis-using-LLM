@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from .java_parser import Annotation, JavaFile, TypeDecl
+from codebase_analyzer.analysis.java_parser import Annotation, JavaFile, TypeDecl
 
 MAPPING_METHODS = {
     "GetMapping": "GET",

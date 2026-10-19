@@ -11,19 +11,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .config import Settings
-from .deterministic import (
+from codebase_analyzer.config import Settings
+from codebase_analyzer.analysis.rules import (
     DeterministicDescription,
     describe_abstract,
     describe_trivial,
     framework_notes,
     implementations_index,
 )
-from .endpoints import Endpoint, read_context_path, resolve_endpoints
-from .grouping import base_package, domain_for
-from .inventory import Inventory, build_inventory
-from .java_parser import JavaFile, Member, TypeDecl, parse_java
-from .metrics import Complexity, member_complexity
+from codebase_analyzer.analysis.endpoints import Endpoint, read_context_path, resolve_endpoints
+from codebase_analyzer.analysis.grouping import base_package, domain_for
+from codebase_analyzer.analysis.inventory import Inventory, build_inventory
+from codebase_analyzer.analysis.java_parser import JavaFile, Member, TypeDecl, parse_java
+from codebase_analyzer.analysis.metrics import Complexity, member_complexity
 
 
 @dataclass

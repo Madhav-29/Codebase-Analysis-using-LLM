@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from codebase_analyzer.endpoints import join_path, read_context_path, resolve_endpoints
-from codebase_analyzer.java_parser import parse_java
+from codebase_analyzer.analysis.endpoints import join_path, read_context_path, resolve_endpoints
+from codebase_analyzer.analysis.java_parser import parse_java
 
 
 def _endpoints(fixture_source, context_path="/api/v1"):

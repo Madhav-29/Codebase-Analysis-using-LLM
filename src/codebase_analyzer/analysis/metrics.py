@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import lizard
 
-from .java_parser import Member
+from codebase_analyzer.analysis.java_parser import Member
 
 
 @dataclass(frozen=True)

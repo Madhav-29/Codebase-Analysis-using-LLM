@@ -10,11 +10,11 @@ from __future__ import annotations
 import re
 from collections import Counter
 
-from .analyze import MapOutput, ReduceResult
-from .config import Settings
-from .facts import ProjectFacts
-from .metrics import complexity_band
-from .schema import (
+from codebase_analyzer.pipeline.map_stage import MapOutput, ReduceResult
+from codebase_analyzer.config import Settings
+from codebase_analyzer.analysis.facts import ProjectFacts
+from codebase_analyzer.analysis.metrics import complexity_band
+from codebase_analyzer.schema.output import (
     AnalysisOutput,
     ClassOut,
     ComplexityOut,

@@ -1,14 +1,14 @@
 import pytest
 from pydantic import ValidationError
 
-from codebase_analyzer.analyze import _unit_validator
-from codebase_analyzer.cache import ResponseCache
-from codebase_analyzer.chunking import plan_units
+from codebase_analyzer.pipeline.map_stage import _unit_validator
+from codebase_analyzer.llm.cache import ResponseCache
+from codebase_analyzer.planning.chunking import plan_units
 from codebase_analyzer.config import Settings
-from codebase_analyzer.facts import build_facts
+from codebase_analyzer.analysis.facts import build_facts
 from langchain_core.exceptions import ModelAuthenticationError, ModelRateLimitError
 
-from codebase_analyzer.llm import (
+from codebase_analyzer.llm.client import (
     FatalLLMError,
     LLMRequest,
     QuotaExhausted,
@@ -16,9 +16,9 @@ from codebase_analyzer.llm import (
     effective_temperature,
     make_chat_model,
 )
-from codebase_analyzer.schema import ClassUnitResponse, DomainResponse
+from codebase_analyzer.schema.output import ClassUnitResponse, DomainResponse
 
-from .fakes import FakeStructuredModel, class_payload
+from ..fakes import FakeStructuredModel, class_payload
 
 VALID = {"classes": [{"type_key": "A", "summary": "s", "responsibilities": [], "findings": [],
                       "methods": [{"member_key": "m1", "description": "d"}]}]}

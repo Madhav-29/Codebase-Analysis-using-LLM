@@ -17,11 +17,11 @@ from dataclasses import dataclass, field
 
 from pydantic import BaseModel
 
-from .chunking import Plan, Unit, plan_units, single_file_unit
-from .config import Settings
-from .facts import ProjectFacts
-from .llm import LLMRequest, StructuredRunner
-from .prompts import (
+from codebase_analyzer.planning.chunking import Plan, Unit, plan_units, single_file_unit
+from codebase_analyzer.config import Settings
+from codebase_analyzer.analysis.facts import ProjectFacts
+from codebase_analyzer.llm.client import LLMRequest, StructuredRunner
+from codebase_analyzer.prompts import (
     CLASS_SYSTEM,
     DOMAIN_SYSTEM,
     PROJECT_SYSTEM,
@@ -29,8 +29,8 @@ from .prompts import (
     number_lines,
     render_project_prompt,
 )
-from .schema import ClassUnitResponse, DomainResponse, Evidence, FindingOut, LLMReducedFinding, ProjectResponse
-from .tokens import estimate_tokens
+from codebase_analyzer.schema.output import ClassUnitResponse, DomainResponse, Evidence, FindingOut, LLMReducedFinding, ProjectResponse
+from codebase_analyzer.planning.tokens import estimate_tokens
 
 log = logging.getLogger(__name__)
 
