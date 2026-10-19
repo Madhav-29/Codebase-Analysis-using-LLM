@@ -47,7 +47,7 @@ Each run writes a review sheet (`evals/review_<model>.md`) with every descriptio
 
 The per-finding verdicts and notes are in [`evals/findings_review.yaml`](../evals/findings_review.yaml).
 
-| | GPT-5.4-mini | Gemini 3.5 Flash-Lite |
+| Reviewed serious findings | GPT-5.4-mini (34) | Gemini 3.5 Flash-Lite (43) |
 |---|---|---|
 | Valid bug | 18 | 27 |
 | Valid improvement | 9 | 5 |
@@ -88,8 +88,10 @@ Fifteen distinct defects were verified against the source across both reviews. F
 
 | | GPT-5.4-mini | Flash-Lite |
 |---|---|---|
-| `high` findings | 21 | 7 |
-| …that are real defects | **19** (2 are improvements) | 4 (3 are overstated improvements) |
+| `high` findings in total | 21 | 7 |
+| …in the recorded review (`evals/findings_review.yaml`) | 12: **11 real defects**, 1 improvement | 7: 4 real defects, 3 overstated improvements |
+
+GPT's other 9 `high` findings (outside `potential_bug`) were spot-checked during the review: 8 real defects (including the non-expiring JWTs and the `releaseYear` crash) and 1 improvement. They are not recorded in `evals/`.
 
 ## Run comparison
 
@@ -104,9 +106,11 @@ Fifteen distinct defects were verified against the source across both reviews. F
 
 The wall-time difference mostly reflects the different rate limits and concurrency, not model speed.
 
+**Where the Gemini figures come from.** They're from its original live run. The committed baseline (`output/baselines/analysis_gemini_flash_lite.json`) was later re-assembled from the response cache after two output-only fixes. Its metadata therefore shows 0 live calls and 123 cache hits, with 288,487 / 50,575 tokens originally spent on those cached responses (the one rejected attempt isn't cached).
+
 ## Conclusion
 
-GPT-5.4-mini is the primary model, and its output is `output/analysis.json`. It describes methods more reliably (no incorrect description in the sample) and made no false claims in the reviewed slice. It found four real defects Flash-Lite missed, two of them significant (non-expiring JWTs, a crash on an optional parameter), and its "high" severity can be trusted.
+GPT-5.4-mini is the primary model, and its output is `output/analysis.json`. It describes methods more reliably (no incorrect description in the sample) and made no false claims among its 34 reviewed serious findings. It found four real defects Flash-Lite missed, two of them significant (non-expiring JWTs, a crash on an optional parameter), and its "high" severity can be trusted.
 
 The costs are 46% more output tokens and roughly three times as many findings. About 20% of the reviewed slice is style opinion. Of GPT's 320 LLM findings, 43 were reviewed (the 34 above plus the 9 other high-severity ones); the remaining **277** (medium findings in other categories, and all low/info) were not reviewed individually. Flash-Lite remains a reasonable zero-cost option, kept in `output/baselines/`.
 

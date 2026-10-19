@@ -25,9 +25,9 @@ GPT-5.4-mini (`gpt-5.4-mini`; served version `gpt-5.4-mini-2026-03-17`) is the p
 | | GPT-5.4-mini | Gemini 3.5 Flash-Lite |
 |---|---|---|
 | Golden-method descriptions: correct / partial / incorrect | **10 / 2 / 0** | 8 / 2 / 2 |
-| Serious findings that are false positives | **0 of 34** | 9 of 43 |
+| Reviewed serious findings that are false positives | **0 of 34** | 9 of 43 |
 | Recall of 15 verified defects | **14 + 1 partial** | 11 |
-| High-severity findings that are real defects | **19 of 21** | 4 of 7 |
+| Recorded high-severity findings that are real defects | **11 of 12** (+8 of 9 spot-checked) | 4 of 7 |
 
 **Integration:** `AzureAIOpenAIApiChatModel` (langchain-azure-ai) on the deployment's `/openai/v1` endpoint. It authenticates with `AZURE_AI_API_KEY`, or with Entra ID via `DefaultAzureCredential`.
 
@@ -38,7 +38,7 @@ GPT-5.4-mini (`gpt-5.4-mini`; served version `gpt-5.4-mini-2026-03-17`) is the p
 
 ## Consequences
 
-- **Volume:** GPT reports ~3× the findings (323 vs 100). The reviewed serious slice has no false positives, but about 20% of it is style opinion, and 277 of the 320 LLM findings were not individually reviewed.
+- **Volume:** GPT reports ~3× the findings (323 vs 100). The 34 reviewed serious findings include no false positives, but about 20% of them are style opinions, and 277 of the 320 LLM findings were not individually reviewed.
 - **Tokens:** output is +46% (74,928 vs 51,287, of which 12,108 are reasoning tokens). The output records token counts only; prices are not estimated.
 - **Data residency:** Data Zone Standard (US) processes requests within the US data zone, so the analyzed code leaves the machine for US data centers. `store=False` asks the service not to retain responses. Code with EU residency requirements needs an EU data-zone deployment.
 - **Model version:** the deployment's version-upgrade policy (pinned or auto-upgrade) is set in Azure AI Foundry, not by this tool. Every run records the version the API actually served in `metadata.served_models`, so a version change shows in the output. The 2026-03-17 version is GA until 2027-09-20.

@@ -16,8 +16,8 @@ Facts (signatures, routes, complexity, which methods exist) come from parsers. T
 |---|---|
 | Coverage | 188/188 files, 248/248 classes, **608/608 methods described** (278 by the LLM, 330 by rules) |
 | Extracted | 70 endpoints, 11 domains, 161 key methods, 323 findings |
-| Run | 123 calls, 0 failures, 3 min 45 s, 306k input / 75k output tokens (prices not included) |
-| Measured accuracy | 12 hand-checked descriptions: **10 correct, 2 partial, 0 incorrect**. 34 serious findings: **0 false positives**. **14 of 15** verified defects found (+1 partial). See [evaluation](docs/evaluation.md). |
+| Run | 123 requests (120 live, 3 from cache), 0 failures, 3 min 45 s, 306k input / 75k output tokens (prices not included) |
+| Measured accuracy | 12 hand-checked descriptions: **10 correct, 2 partial, 0 incorrect**. **0 false positives** among the 34 reviewed serious findings. **14 of 15** verified defects found (+1 partial). See [evaluation](docs/evaluation.md). |
 
 The full output is in [`output/analysis.json`](output/analysis.json), with a readable [`output/analysis_report.md`](output/analysis_report.md). A Gemini 3.5 Flash-Lite baseline is in [`output/baselines/`](output/baselines).
 
