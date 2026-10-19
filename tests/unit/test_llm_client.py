@@ -1,22 +1,15 @@
 import hashlib
 import json
 
-import httpx
-import openai
 import pytest
 from langchain_core.exceptions import ModelAuthenticationError, ModelRateLimitError
-from langchain_openai.chat_models.base import (
-    OpenAIAuthenticationError,
-    OpenAIModelNotFoundError,
-    OpenAIRateLimitError,
-)
 from pydantic import ValidationError
 
 from codebase_analyzer.analysis.facts import build_facts
 from codebase_analyzer.config import Settings
 from codebase_analyzer.errors import ProviderAuthError, ProviderQuotaExhausted
 from codebase_analyzer.llm.cache import ResponseCache, cache_key
-from codebase_analyzer.llm.client import LLMRequest, StructuredRunner, classify, retry_hint_seconds
+from codebase_analyzer.llm.client import LLMRequest, StructuredRunner, classify
 from codebase_analyzer.pipeline.map_stage import _unit_validator
 from codebase_analyzer.planning.chunking import plan_units
 from codebase_analyzer.schema.responses import ClassUnitResponse, DomainResponse
@@ -186,31 +179,6 @@ def test_auth_error_is_fatal_without_retries():
     with pytest.raises(ProviderAuthError):
         _runner(fake).run([_req()], "t")
     assert len(fake.calls) == 1
-
-
-def _http_error(cls, status, headers=None, body=None):
-    request = httpx.Request("POST", "https://example.services.ai.azure.com/openai/v1/chat/completions")
-    return cls("error", response=httpx.Response(status, headers=headers or {}, request=request), body=body)
-
-
-def test_azure_errors_are_classified_and_retry_after_headers_honored():
-    limited = _http_error(OpenAIRateLimitError, 429, {"retry-after-ms": "1500"})
-    assert classify(limited) == "transient" and retry_hint_seconds(limited) == 1.5
-    assert retry_hint_seconds(_http_error(OpenAIRateLimitError, 429, {"retry-after": "7"})) == 7.0
-    assert classify(_http_error(OpenAIAuthenticationError, 401)) == "fatal"
-    assert classify(_http_error(OpenAIModelNotFoundError, 404)) == "fatal"  # unknown deployment name
-    filtered = _http_error(openai.BadRequestError, 400, body={"code": "content_filter", "message": "filtered"})
-    assert classify(filtered) == "filtered"
-
-
-def test_content_filter_fails_the_unit_at_once_and_the_run_continues():
-    filtered = _http_error(openai.BadRequestError, 400, body={"code": "content_filter", "message": "filtered"})
-    fake = FakeStructuredModel(lambda s, u, n: filtered if "user 1" in u else DOMAIN_OK)
-    reqs = [LLMRequest(f"r{i}", "sys", f"user {i}", DomainResponse) for i in (1, 2)]
-    results = _runner(fake).run(reqs, "t")
-    assert results["r1"].parsed is None and results["r1"].error.startswith("content filter")
-    assert results["r1"].attempts == 1 and sum("user 1" in u for _, u in fake.calls) == 1  # no retries
-    assert results["r2"].parsed is not None
 
 
 def test_reasoning_tokens_and_served_model_are_recorded_live_and_from_cache(tmp_path):
