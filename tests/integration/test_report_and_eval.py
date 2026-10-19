@@ -12,7 +12,7 @@ from codebase_analyzer.evaluation import (
     review_sheet,
     unmatched_reviews,
 )
-from codebase_analyzer.report import render_report
+from codebase_analyzer.report import method_label, render_report
 
 from .test_pipeline import _run
 
@@ -98,3 +98,8 @@ def test_finding_reviews_are_scored_and_checked_against_the_analysis(make_repo, 
     reviews = load_finding_reviews(path)["fake-model"]
     assert finding_scores(reviews) == {"valid_improvement": 1, "false_positive": 1}
     assert unmatched_reviews(out, reviews) == ["x.Gone: not in this analysis"]
+
+
+def test_method_labels_keep_dotted_parameter_types():
+    member_id = "com.x.rental.RentalServiceImpl#rentDvd(RentalDto.RentalCreateRequest)@L63"
+    assert method_label(member_id) == "RentalServiceImpl#rentDvd(RentalDto.RentalCreateRequest)"

@@ -22,6 +22,12 @@ def _short(fqn: str) -> str:
     return fqn.rsplit(".", 1)[-1]
 
 
+def method_label(member_id: str) -> str:
+    """'pkg.Class#name(pkg.Type)@L12' -> 'Class#name(pkg.Type)'; parameter types may contain dots."""
+    owner, _, rest = member_id.partition("#")
+    return f"{_short(owner)}#{rest.rsplit('@L', 1)[0]}"
+
+
 def _evidence(f: FindingOut) -> str:
     return ", ".join(f"`{e.file.rsplit('/', 1)[-1]}:{e.line_start}-{e.line_end}`" for e in f.evidence[:3]) + (
         f" (+{len(f.evidence) - 3} more)" if len(f.evidence) > 3 else ""
@@ -101,7 +107,9 @@ def render_report(a: AnalysisOutput) -> str:
         f"Average cyclomatic complexity {cs.avg_cyclomatic} (max {cs.max_cyclomatic}); average NLOC {cs.avg_nloc} "
         f"(max {cs.max_nloc}). Bands: "
         + ", ".join(f"{b} {cs.band_counts.get(b, 0)}" for b in ("low", "moderate", "high", "very_high"))
-        + f" (thresholds {cs.thresholds}).",
+        + " (CC thresholds: "
+        + ", ".join(f"{band.replace('_', ' ')} >= {value}" for band, value in cs.thresholds.items())
+        + ").",
         "",
         "Most complex business logic:",
         "",
@@ -109,8 +117,7 @@ def render_report(a: AnalysisOutput) -> str:
         "|---|---|---|---|",
     ]
     out += [
-        f"| {r.cyclomatic} | {r.nloc} | `{_cell(r.id.split('.')[-1].split('@')[0])}` "
-        f"| `{r.file.rsplit('/', 1)[-1]}:{r.line_start}` |"
+        f"| {r.cyclomatic} | {r.nloc} | `{_cell(method_label(r.id))}` | `{r.file.rsplit('/', 1)[-1]}:{r.line_start}` |"
         for r in cs.top_complex_methods
     ]
     if cs.top_complex_trivial_methods:
@@ -118,7 +125,7 @@ def render_report(a: AnalysisOutput) -> str:
         out += [
             "",
             f"Boilerplate ranked separately: {len(cs.top_complex_trivial_methods)} listed, the highest "
-            f"`{top.id.split('.')[-1].split('@')[0]}` at CC {top.cyclomatic}.",
+            f"`{method_label(top.id)}` at CC {top.cyclomatic}.",
         ]
 
     by_severity = Counter(f.severity for f in a.findings)
