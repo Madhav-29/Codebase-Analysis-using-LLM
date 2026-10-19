@@ -15,12 +15,9 @@ from ..fakes import FakeStructuredModel, class_payload, fake_provider, smart_res
 
 FILES = {
     "com/acme/shop/order/controller/OrderController.java": None,  # filled from fixture
-    "com/acme/shop/order/dto/OrderDto.java":
-        "package com.acme.shop.order.dto;\n@Getter\npublic class OrderDto { private Integer id; }\n",
-    "com/acme/shop/order/dto/OrderLine.java":
-        "package com.acme.shop.order.dto;\n@Getter\npublic class OrderLine { private Integer qty; }\n",
-    "com/acme/shop/order/service/OrderService.java":
-        "package com.acme.shop.order.service;\npublic interface OrderService { java.util.List<Object> findAll(); }\n",
+    "com/acme/shop/order/dto/OrderDto.java": "package com.acme.shop.order.dto;\n@Getter\npublic class OrderDto { private Integer id; }\n",
+    "com/acme/shop/order/dto/OrderLine.java": "package com.acme.shop.order.dto;\n@Getter\npublic class OrderLine { private Integer qty; }\n",
+    "com/acme/shop/order/service/OrderService.java": "package com.acme.shop.order.service;\npublic interface OrderService { java.util.List<Object> findAll(); }\n",
 }
 
 
@@ -77,7 +74,9 @@ def test_failed_unit_is_recorded_not_fabricated(make_repo, fixture_source):
     assert ctrl.summary is None and ctrl.summary_source == "failed"
     assert any(m.description_source == "failed" and m.description is None for m in ctrl.methods)
     assert any("OrderController" in f.unit for f in out.coverage.units_failed)
-    assert set(out.coverage.methods_undescribed) == {m.id for c in out.classes for m in c.methods if m.description is None}
+    assert set(out.coverage.methods_undescribed) == {
+        m.id for c in out.classes for m in c.methods if m.description is None
+    }
 
 
 def test_max_classes_keeps_all_facts(make_repo, fixture_source):
@@ -111,12 +110,21 @@ def test_reduce_evidence_must_cite_real_lines_of_input_files():
     from codebase_analyzer.schema.responses import LLMEvidence, LLMReducedFinding
 
     def finding(file, start, end):
-        return LLMReducedFinding(category="security", severity="low", title=f"{file}:{start}", detail="d",
-                                 evidence=[LLMEvidence(file=file, line_start=start, line_end=end)])
+        return LLMReducedFinding(
+            category="security",
+            severity="low",
+            title=f"{file}:{start}",
+            detail="d",
+            evidence=[LLMEvidence(file=file, line_start=start, line_end=end)],
+        )
 
     dropped: list[str] = []
-    kept = _reduce_findings([finding("a.yaml", 3, 4), finding("a.yaml", 50, 51), finding("other.java", 1, 1)],
-                            "project", {"a.yaml": 10}, dropped)
+    kept = _reduce_findings(
+        [finding("a.yaml", 3, 4), finding("a.yaml", 50, 51), finding("other.java", 1, 1)],
+        "project",
+        {"a.yaml": 10},
+        dropped,
+    )
     assert [f.title for f in kept] == ["a.yaml:3"] and len(dropped) == 2
 
 
@@ -125,13 +133,21 @@ def test_llm_finding_duplicating_a_deterministic_one_is_dropped_and_recorded():
     from codebase_analyzer.schema.output import Evidence, FindingOut
 
     def f(category, file, source):
-        return FindingOut(category=category, severity="low", title=f"{category}@{file}", detail="d", scope="project",
-                          evidence=[Evidence(file=file, line_start=1, line_end=2)], source=source)
+        return FindingOut(
+            category=category,
+            severity="low",
+            title=f"{category}@{file}",
+            detail="d",
+            scope="project",
+            evidence=[Evidence(file=file, line_start=1, line_end=2)],
+            source=source,
+        )
 
     det = [f("documentation_mismatch", "README.md", "deterministic")]
     dropped: list[str] = []
-    kept = drop_duplicates_of(det, [f("documentation_mismatch", "README.md", "llm"), f("security", "README.md", "llm")],
-                              dropped)
+    kept = drop_duplicates_of(
+        det, [f("documentation_mismatch", "README.md", "llm"), f("security", "README.md", "llm")], dropped
+    )
     assert [k.category for k in kept] == ["security"] and len(dropped) == 1
 
 
@@ -162,3 +178,36 @@ def test_prompt_member_keys_never_leak_into_output(make_repo, fixture_source):
     texts = [f.detail for f in out.findings] + [m.description or "" for c in out.classes for m in c.methods]
     assert not any(re.search(r"\bm\d+\b", t) for t in texts)
     assert any(re.search(r"In method \w+\(\), the input", t) for t in texts)
+
+
+def test_oversized_domain_input_is_condensed_hierarchically(make_repo, fixture_source):
+    import json
+
+    from codebase_analyzer.config import TokenBudget
+    from codebase_analyzer.pipeline.map_stage import run_map
+    from codebase_analyzer.pipeline.reduce_stage import run_domain_reduce
+    from codebase_analyzer.planning.tokens import estimate_tokens
+    from codebase_analyzer.prompts import DOMAIN_SYSTEM
+    from codebase_analyzer.schema.responses import DomainResponse
+
+    def long_summaries(schema, user, n):
+        payload = smart_responder(schema, user, n)
+        if schema is ClassUnitResponse:
+            for cls in payload["classes"]:
+                cls["summary"] = "word " * 160  # ~270 tokens per class line
+        return payload
+
+    files = dict(FILES)
+    files["com/acme/shop/order/controller/OrderController.java"] = fixture_source("OrderController.java")
+    overhead = estimate_tokens(DOMAIN_SYSTEM, 3.0) + estimate_tokens(
+        json.dumps(DomainResponse.model_json_schema()), 3.0
+    )
+    settings = Settings(budget=TokenBudget(reduce_input_tokens=overhead + 300))  # two class lines no longer fit
+    facts = build_facts(make_repo(files, context_path="/api"), settings)
+    fake = FakeStructuredModel(long_summaries)
+    runner = StructuredRunner(fake_provider(fake), settings, None, "v")
+    mo = run_map(facts, settings, runner, select_paths(facts, None))
+    domains, _ = run_domain_reduce(facts, settings, runner, mo)
+
+    assert any("partial input - group" in user for _, user in fake.calls)  # condensed before the final call
+    assert all(r.response is not None for r in domains.values()) and not mo.failed_units
