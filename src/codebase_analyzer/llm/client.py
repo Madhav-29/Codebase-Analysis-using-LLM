@@ -71,7 +71,8 @@ def _is_content_filter(exc: BaseException) -> bool:
 
 def classify(exc: BaseException) -> Outcome:
     """Map a provider exception to what the client does next; the one place errors are interpreted."""
-    if isinstance(exc, FATAL_ERRORS):
+    # Gemini rejects a bad key with 400 INVALID_ARGUMENT, not 401, so the text identifies it.
+    if isinstance(exc, FATAL_ERRORS) or "API_KEY_INVALID" in str(exc) or "API key not valid" in str(exc):
         return "fatal"
     if isinstance(exc, ModelRateLimitError) and "PerDay" in str(exc):
         return "quota"

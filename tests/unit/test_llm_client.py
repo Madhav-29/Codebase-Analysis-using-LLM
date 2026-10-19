@@ -244,3 +244,14 @@ def test_cache_keys_isolate_providers_models_and_reasoning_effort():
         cache_key(**base, schema=DomainResponse, reasoning_effort="high"),
     }
     assert len(variants) == 4 and key not in variants
+
+
+def test_an_invalid_gemini_key_is_fatal_although_gemini_reports_it_as_400():
+    from langchain_google_genai.chat_models import GoogleInvalidRequestError
+
+    invalid_key = GoogleInvalidRequestError("400 INVALID_ARGUMENT. API key not valid. reason: API_KEY_INVALID")
+    assert classify(invalid_key) == "fatal"
+    fake = FakeStructuredModel(lambda s, u, n: invalid_key)
+    with pytest.raises(ProviderAuthError):
+        _runner(fake).run([_req()], "t")
+    assert len(fake.calls) == 1  # stops at once instead of retrying every unit
