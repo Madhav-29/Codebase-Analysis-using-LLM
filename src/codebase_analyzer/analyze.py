@@ -386,4 +386,17 @@ def run_project_reduce(facts: ProjectFacts, settings: Settings, runner: Structur
         mo.failed_units.append(("project", res.error or "unknown error"))
         return ReduceResult(None, res.error), []
     known = {f.path: len(facts.inventory.read(f.path).splitlines()) for f in facts.inventory.files}
-    return ReduceResult(res.parsed, None), _reduce_findings(res.parsed.findings, "project", known, mo.dropped_findings)
+    findings = _reduce_findings(res.parsed.findings, "project", known, mo.dropped_findings)
+    return ReduceResult(res.parsed, None), drop_duplicates_of(deterministic_findings, findings, mo.dropped_findings)
+
+
+def drop_duplicates_of(deterministic: list[FindingOut], llm: list[FindingOut], dropped: list[str]) -> list[FindingOut]:
+    """Deterministic findings win: an LLM finding with the same category and evidence file is a duplicate."""
+    taken = {(f.category, e.file) for f in deterministic for e in f.evidence}
+    kept = []
+    for f in llm:
+        if any((f.category, e.file) in taken for e in f.evidence):
+            dropped.append(f"{f.scope}: '{f.title}' duplicates a deterministic {f.category} finding")
+        else:
+            kept.append(f)
+    return kept

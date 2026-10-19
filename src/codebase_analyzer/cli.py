@@ -25,7 +25,7 @@ from .cache import ResponseCache
 from .chunking import Plan, plan_units
 from .config import Settings, TokenBudget
 from .facts import ProjectFacts, build_facts
-from .llm import FatalLLMError, QuotaExhausted, StructuredRunner, make_chat_model
+from .llm import FatalLLMError, QuotaExhausted, StructuredRunner, effective_temperature, make_chat_model
 from .prompts import CLASS_SYSTEM, PROMPT_VERSION
 from .schema import AnalysisOutput, Metadata, Usage
 
@@ -170,9 +170,13 @@ def analyze(repo: RepoOpt, output: Annotated[Path, typer.Option("--output")] = P
         raise typer.Exit(2) from exc
 
     u = runner.usage
+    temperature = effective_temperature(s)
     metadata = Metadata(
         repo_url=url, commit_sha=sha, analyzed_at=started.isoformat(timespec="seconds"),
-        prompt_version=PROMPT_VERSION, provider=s.llm_provider, model=s.llm_model, temperature=s.llm_temperature,
+        prompt_version=PROMPT_VERSION, provider=s.llm_provider, model=s.llm_model, temperature=temperature,
+        temperature_note=None if temperature is not None else
+        f"Not sent: {s.llm_model} uses fixed sampling defaults and ignores temperature. "
+        "Reproducibility comes from the response cache.",
         token_budget={**s.budget.model_dump(), "input_limit": s.budget.input_limit},
         packing=s.packing.model_dump(), context_path=facts.context_path,
         usage=Usage(llm_calls=u.llm_calls, input_tokens=u.input_tokens, output_tokens=u.output_tokens,

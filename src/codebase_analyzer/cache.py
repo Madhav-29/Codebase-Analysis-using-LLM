@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from .prompts import PROMPT_VERSION
 
 
-def cache_key(*, provider: str, model: str, temperature: float,
+def cache_key(*, provider: str, model: str, temperature: float | None,
               schema: type[BaseModel], system: str, user: str) -> str:
     payload = json.dumps(
         {

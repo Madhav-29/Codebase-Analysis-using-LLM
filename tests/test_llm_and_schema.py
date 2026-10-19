@@ -8,7 +8,14 @@ from codebase_analyzer.config import Settings
 from codebase_analyzer.facts import build_facts
 from langchain_core.exceptions import ModelAuthenticationError, ModelRateLimitError
 
-from codebase_analyzer.llm import FatalLLMError, LLMRequest, QuotaExhausted, StructuredRunner, make_chat_model
+from codebase_analyzer.llm import (
+    FatalLLMError,
+    LLMRequest,
+    QuotaExhausted,
+    StructuredRunner,
+    effective_temperature,
+    make_chat_model,
+)
 from codebase_analyzer.schema import ClassUnitResponse, DomainResponse
 
 from .fakes import FakeStructuredModel, class_payload
@@ -156,3 +163,10 @@ def test_gemini_chat_model_is_configured_from_settings(monkeypatch):
     assert type(llm).__name__ == "ChatGoogleGenerativeAI"
     assert llm.model == "gemini-3.8-flash" and llm.temperature == 0.0
     assert llm.max_output_tokens == Settings().budget.output_reserve and llm.max_retries == 1
+
+
+def test_temperature_is_not_sent_to_fixed_sampling_models(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "dummy-not-a-real-key")
+    lite = Settings(llm_provider="google_genai", llm_model="gemini-3.5-flash-lite")
+    assert effective_temperature(lite) is None and make_chat_model(lite).temperature is None
+    assert effective_temperature(Settings(llm_provider="google_genai", llm_model="gemini-3.8-flash")) == 0.0

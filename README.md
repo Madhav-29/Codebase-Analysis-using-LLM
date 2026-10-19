@@ -58,7 +58,7 @@ uv run pytest                                                                 # 
 
 Useful options: `--max-classes N` (analyze N source files, picked round-robin across domains; facts are still emitted for all), `--model`, `--provider google_genai|anthropic`, `--concurrency`, `--request-tokens`, `--output-reserve`, `--no-cache`, `estimate --native-count` (checks the local token estimate against Gemini's `count_tokens`).
 
-Configuration via `.env` / environment: `LLM_PROVIDER` (default `google_genai`), `LLM_MODEL` (default `gemini-3.8-flash`), `LLM_TEMPERATURE` (default `0`), `LLM_CONCURRENCY` (default `1`). An optional Anthropic provider is available with `uv sync --extra anthropic`, `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`. It is kept for portability but was not used for the delivered output.
+Configuration via `.env` / environment: `LLM_PROVIDER` (default `google_genai`), `LLM_MODEL` (default `gemini-3.5-flash-lite`), `LLM_TEMPERATURE` (default `0`), `LLM_CONCURRENCY` (default `1`). An optional Anthropic provider is available with `uv sync --extra anthropic`, `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`. It is kept for portability but was not used for the delivered output.
 
 ## Architecture
 

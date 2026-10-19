@@ -35,7 +35,7 @@ def _run(make_repo, fixture_source, responder=smart_responder, max_classes=None)
     det = deterministic_findings(facts, settings)
     project, pfind = run_project_reduce(facts, settings, runner, mo, domains, det)
     meta = Metadata(repo_url=None, commit_sha=None, analyzed_at="t", prompt_version="v", provider="fake",
-                    model="fake", temperature=0.0, token_budget={}, packing={}, context_path=facts.context_path,
+                    model="fake", temperature=0.0, temperature_note=None, token_budget={}, packing={}, context_path=facts.context_path,
                     usage=Usage(), max_classes=max_classes)
     out = build_output(facts=facts, settings=settings, selected=selected, mo=mo, domains=domains, project=project,
                        findings=mo.findings + dfind + pfind + det, metadata=meta)
@@ -125,3 +125,18 @@ def test_reduce_evidence_must_cite_real_lines_of_input_files():
     kept = _reduce_findings([finding("a.yaml", 3, 4), finding("a.yaml", 50, 51), finding("other.java", 1, 1)],
                             "project", {"a.yaml": 10}, dropped)
     assert [f.title for f in kept] == ["a.yaml:3"] and len(dropped) == 2
+
+
+def test_llm_finding_duplicating_a_deterministic_one_is_dropped_and_recorded():
+    from codebase_analyzer.analyze import drop_duplicates_of
+    from codebase_analyzer.schema import Evidence, FindingOut
+
+    def f(category, file, source):
+        return FindingOut(category=category, severity="low", title=f"{category}@{file}", detail="d", scope="project",
+                          evidence=[Evidence(file=file, line_start=1, line_end=2)], source=source)
+
+    det = [f("documentation_mismatch", "README.md", "deterministic")]
+    dropped: list[str] = []
+    kept = drop_duplicates_of(det, [f("documentation_mismatch", "README.md", "llm"), f("security", "README.md", "llm")],
+                              dropped)
+    assert [k.category for k in kept] == ["security"] and len(dropped) == 1

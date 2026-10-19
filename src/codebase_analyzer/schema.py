@@ -102,7 +102,8 @@ class Metadata(BaseModel):
     prompt_version: str
     provider: str
     model: str
-    temperature: float
+    temperature: float | None  # None: the model uses fixed sampling and ignores it
+    temperature_note: str | None
     token_budget: dict
     packing: dict
     context_path: str

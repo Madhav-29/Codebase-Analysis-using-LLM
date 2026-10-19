@@ -75,9 +75,23 @@ def retry_hint_seconds(exc: BaseException) -> float | None:
     return float(m.group(1)) if m else None
 
 
+def effective_temperature(settings: Settings) -> float | None:
+    """The temperature actually applied; None when the model ignores custom sampling (e.g. Gemini 3.5 Flash-Lite)."""
+    if settings.llm_provider == "google_genai":
+        try:  # private helper: the integration's own list of fixed-sampling models
+            from langchain_google_genai.chat_models import _uses_fixed_sampling_and_disallows_prefill
+        except ImportError:
+            return settings.llm_temperature
+        if _uses_fixed_sampling_and_disallows_prefill(settings.llm_model):
+            return None
+    return settings.llm_temperature
+
+
 def make_chat_model(settings: Settings) -> BaseChatModel:
-    common: dict = {"model": settings.llm_model, "temperature": settings.llm_temperature,
-                    "max_tokens": settings.budget.output_reserve, "timeout": settings.llm_timeout_s}
+    common: dict = {"model": settings.llm_model, "max_tokens": settings.budget.output_reserve,
+                    "timeout": settings.llm_timeout_s}
+    if (temperature := effective_temperature(settings)) is not None:
+        common["temperature"] = temperature
     if settings.llm_provider == "google_genai":
         from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -156,7 +170,7 @@ class StructuredRunner:
 
     def _key(self, req: LLMRequest) -> str:
         s = self.settings
-        return cache_key(provider=s.llm_provider, model=s.llm_model, temperature=s.llm_temperature,
+        return cache_key(provider=s.llm_provider, model=s.llm_model, temperature=effective_temperature(s),
                          schema=req.schema, system=req.system, user=req.user)
 
     def _validate(self, req: LLMRequest, parsed: BaseModel) -> None:

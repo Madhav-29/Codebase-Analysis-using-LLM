@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     llm_provider: Literal["google_genai", "anthropic"] = "google_genai"
-    llm_model: str = "gemini-3.8-flash"
+    llm_model: str = "gemini-3.5-flash-lite"
     llm_temperature: float = 0.0
     llm_concurrency: int = 1  # free-tier friendly; raise on a paid tier
     llm_max_attempts: int = 3  # per request, for unparseable or locally invalid output
