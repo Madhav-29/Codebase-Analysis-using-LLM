@@ -1,8 +1,21 @@
+import os
 from pathlib import Path
 
 import pytest
 
+from codebase_analyzer.config import Settings
+
 FIXTURES = Path(__file__).parent / "fixtures"
+PROVIDER_ENV_PREFIXES = ("LLM_", "AZURE_", "GOOGLE_", "GEMINI_", "ANTHROPIC_", "OPENAI_")
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_settings(monkeypatch):
+    """Tests must not depend on the developer's .env or shell: no env file, no provider variables."""
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    for name in list(os.environ):
+        if name.startswith(PROVIDER_ENV_PREFIXES):
+            monkeypatch.delenv(name)
 
 
 @pytest.fixture
