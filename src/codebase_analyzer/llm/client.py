@@ -135,7 +135,6 @@ class UsageTotals:
     cached_input_tokens: int = 0  # tokens originally spent producing the responses replayed from cache
     cached_output_tokens: int = 0
     cached_reasoning_tokens: int = 0
-    failures: int = 0
     served_models: set[str] = field(default_factory=set)  # model versions the provider reported
     per_stage: dict[str, dict[str, int]] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
@@ -168,10 +167,6 @@ class UsageTotals:
             if served_model:
                 self.served_models.add(served_model)
             self._stage(stage)["cache_hits"] += 1
-
-    def add_failure(self) -> None:
-        with self._lock:
-            self.failures += 1
 
 
 class StructuredRunner:
@@ -244,7 +239,6 @@ class StructuredRunner:
             if self._content_filtered(out):
                 feedback = f"content filter: {error}"
                 break  # the same code would be filtered again
-        self.usage.add_failure()
         return LLMResult(req.id, None, feedback, attempt, False, total_in, total_out)
 
     def _invoke_with_backoff(self, runnable: Any, messages: list[BaseMessage], rid: str) -> Any:

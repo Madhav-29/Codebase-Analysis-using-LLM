@@ -28,7 +28,6 @@ log = logging.getLogger(__name__)
 class ClassResult:
     summary: str
     responsibilities: list[str]
-    unit_id: str
 
 
 @dataclass
@@ -161,7 +160,7 @@ def _merge_unit(unit: Unit, resp: ClassUnitResponse, facts: ProjectFacts, out: M
         out.unit_of_file[tf.file.path] = unit.split_parent or unit.id
         existing = out.classes.get(fqn)
         if existing is None:  # split parts: the first part's summary wins, responsibilities are unioned
-            out.classes[fqn] = ClassResult(cls.summary, list(cls.responsibilities), unit.split_parent or unit.id)
+            out.classes[fqn] = ClassResult(cls.summary, list(cls.responsibilities))
         else:
             existing.responsibilities += [r for r in cls.responsibilities if r not in existing.responsibilities]
         for m in cls.methods:

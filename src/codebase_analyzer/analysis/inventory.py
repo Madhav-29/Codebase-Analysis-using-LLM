@@ -26,7 +26,6 @@ CONTEXT_FILES = {
 class RepoFile:
     path: str  # repo-relative, POSIX separators
     category: str  # main_java | test_java | app_config | build_config | readme | other
-    size_bytes: int
 
 
 @dataclass
@@ -76,7 +75,7 @@ def build_inventory(root: Path) -> Inventory:
             inv.skipped.append((rel, "binary"))
             continue
         category = _classify(rel)
-        inv.files.append(RepoFile(rel, category, path.stat().st_size))
+        inv.files.append(RepoFile(rel, category))
         if category == "other":
             inv.skipped.append((rel, "not an analysis target"))
         elif category == "test_java":
