@@ -1,0 +1,3 @@
+# Synthetic signing-key fixture in test_secret_values_are_masked_before_reaching_the_llm.
+# Ignore only this historical occurrence; production files and other tests remain scanned.
+332bf2a6c3d7ce76a87f058483e28c9df330b82b:tests/test_pipeline.py:generic-api-key:110
