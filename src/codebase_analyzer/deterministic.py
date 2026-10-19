@@ -36,7 +36,7 @@ LOMBOK_NOTES = {
     "Builder": "Lombok @Builder generates a builder (static builder() method).",
     "NoArgsConstructor": "Lombok @NoArgsConstructor generates a no-argument constructor.",
     "AllArgsConstructor": "Lombok @AllArgsConstructor generates a constructor taking every field.",
-    "RequiredArgsConstructor": "Lombok @RequiredArgsConstructor generates a constructor for final fields (used for constructor injection).",
+    "RequiredArgsConstructor": "Lombok @RequiredArgsConstructor generates a constructor for final and @NonNull fields.",
     "ToString": "Lombok @ToString generates toString().",
     "EqualsAndHashCode": "Lombok @EqualsAndHashCode generates equals() and hashCode().",
     "FieldNameConstants": "Lombok @FieldNameConstants generates a nested Fields class with field-name constants.",

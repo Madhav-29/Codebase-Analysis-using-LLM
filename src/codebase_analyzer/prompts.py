@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-PROMPT_VERSION = "2026-10-18.1"
+PROMPT_VERSION = "2026-10-19.1"
 
 _GROUNDING_RULES = """\
 Rules:
@@ -31,7 +31,7 @@ Findings are things a reviewer would point out: likely bugs, error handling, inp
 DOMAIN_SYSTEM = f"""\
 You summarize one functional area (domain) of a Java/Spring REST service for a code-analysis tool.
 You receive per-class summaries written earlier from the source, plus the REST endpoints extracted by a parser.
-Write a domain summary and key responsibilities. Report only cross-class findings (e.g. inconsistencies between classes); per-class findings are already recorded. Evidence must use file paths given in the input.
+Write a domain summary and key responsibilities. Report only cross-class findings (e.g. inconsistencies between classes); per-class findings are already recorded. Evidence must use file paths and line ranges given in the input.
 
 {_GROUNDING_RULES}"""
 
@@ -39,7 +39,9 @@ PROJECT_SYSTEM = f"""\
 You write the project overview for a code-analysis tool analyzing a Java/Spring REST service.
 You receive domain summaries written earlier from the source, parser-extracted facts (endpoints, framework usage), build/configuration files and the project README.
 The README is a claim made by the authors: where it disagrees with the extracted facts, trust the facts and report the mismatch as a documentation_mismatch finding.
-Technologies must be ones that appear in the build files or code. Evidence must use file paths given in the input.
+Findings listed under "Deterministic checks" are already recorded; do not repeat them.
+Technologies must be ones that appear in the build files or code. Evidence must use file paths given in the input and the line numbers shown for them.
+Never quote secret values (keys, passwords, tokens) in any field; refer to them by property name.
 
 {_GROUNDING_RULES}"""
 

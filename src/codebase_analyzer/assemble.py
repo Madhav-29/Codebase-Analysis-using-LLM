@@ -45,18 +45,25 @@ class CoverageError(AssertionError):
 def deterministic_findings(facts: ProjectFacts, settings: Settings) -> list[FindingOut]:
     findings: list[FindingOut] = []
 
-    # 1. Methods at or above the "high" cyclomatic threshold.
+    # 1. Methods at or above the "high" cyclomatic threshold; boilerplate (e.g. hand-written equals) reported apart.
     high = settings.complexity_thresholds["high"]
     complex_members = [(t, mf) for t in facts.types.values() for mf in t.members
                        if mf.complexity and mf.complexity.cyclomatic >= high]
-    if complex_members:
-        names = ", ".join(f"{t.decl.name}.{mf.member.name} (CC {mf.complexity.cyclomatic})" for t, mf in complex_members)
+    for trivial in (False, True):
+        group = [(t, mf) for t, mf in complex_members if bool(mf.deterministic and mf.deterministic.trivial) == trivial]
+        if not group:
+            continue
+        names = ", ".join(f"{t.decl.name}.{mf.member.name} (CC {mf.complexity.cyclomatic})" for t, mf in group)
         findings.append(FindingOut(
-            category="maintainability", severity="low",
-            title=f"{len(complex_members)} method(s) with cyclomatic complexity >= {high}",
-            detail=f"Measured by lizard: {names}.", scope="project",
+            category="maintainability", severity="info" if trivial else "low",
+            title=(f"{len(group)} boilerplate method(s) with cyclomatic complexity >= {high}" if trivial
+                   else f"{len(group)} method(s) with cyclomatic complexity >= {high}"),
+            detail=f"Measured by lizard: {names}." + (
+                " These are hand-written equals/hashCode-style members classified as boilerplate, not business logic."
+                if trivial else ""),
+            scope="project",
             evidence=[Evidence(file=t.file.path, line_start=mf.member.line_start, line_end=mf.member.line_end)
-                      for t, mf in complex_members],
+                      for t, mf in group],
             source="deterministic"))
 
     # 2. README endpoint claims vs. resolved controller mappings.
@@ -64,6 +71,10 @@ def deterministic_findings(facts: ProjectFacts, settings: Settings) -> list[Find
     if readme and facts.endpoints:
         text = facts.inventory.read(readme.path)
         base = facts.context_path.rstrip("/")
+        # evidence: the README lines mentioning the API base path (its endpoint list), else the whole file
+        cited = [n for n, line in enumerate(text.splitlines(), start=1) if base and base in line]
+        readme_evidence = [Evidence(file=readme.path, line_start=min(cited, default=1),
+                                    line_end=max(cited, default=text.count("\n") + 1))]
         claimed = {m.group(1) for m in re.finditer(re.escape(base) + r"/([A-Za-z0-9_-]+)", text)} if base else set()
         resources: dict[str, set[str]] = {}
         for e in facts.endpoints:
@@ -81,7 +92,7 @@ def deterministic_findings(facts: ProjectFacts, settings: Settings) -> list[Find
             findings.append(FindingOut(
                 category="documentation_mismatch", severity="low", title="README endpoint list differs from controller mappings",
                 detail=" ".join(detail), scope="project",
-                evidence=[Evidence(file=readme.path, line_start=1, line_end=text.count("\n") + 1)], source="deterministic"))
+                evidence=readme_evidence, source="deterministic"))
         if "CRUD" in text:
             crud = {"GET", "POST", "PUT", "DELETE"}
             partial = {r: sorted(crud - verbs) for r, verbs in resources.items() if crud - verbs and r in claimed}
@@ -92,7 +103,7 @@ def deterministic_findings(facts: ProjectFacts, settings: Settings) -> list[Find
                     detail="Missing verbs per resource (from mappings): "
                            + "; ".join(f"{base}/{r}: {', '.join(v)}" for r, v in sorted(partial.items())) + ".",
                     scope="project",
-                    evidence=[Evidence(file=readme.path, line_start=1, line_end=text.count("\n") + 1)],
+                    evidence=readme_evidence,
                     source="deterministic"))
     return findings
 

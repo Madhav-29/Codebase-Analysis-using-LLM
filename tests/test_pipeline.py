@@ -102,3 +102,26 @@ def test_coverage_check_fails_loudly_when_a_method_is_missing(make_repo, fixture
     victim.methods.pop()
     with pytest.raises(CoverageError, match="members missing"):
         verify_coverage(broken, facts)
+
+
+def test_secret_values_are_masked_before_reaching_the_llm():
+    from codebase_analyzer.analyze import mask_secrets
+
+    text = "app:\n  jwt:\n    signing-key: c2VjcmV0LXZhbHVl\n  datasource:\n    password: hunter2\n  host: localhost\n"
+    masked = mask_secrets(text)
+    assert "c2VjcmV0LXZhbHVl" not in masked and "hunter2" not in masked
+    assert "host: localhost" in masked and "signing-key:" in masked  # key names stay visible
+
+
+def test_reduce_evidence_must_cite_real_lines_of_input_files():
+    from codebase_analyzer.analyze import _reduce_findings
+    from codebase_analyzer.schema import LLMEvidence, LLMReducedFinding
+
+    def finding(file, start, end):
+        return LLMReducedFinding(category="security", severity="low", title=f"{file}:{start}", detail="d",
+                                 evidence=[LLMEvidence(file=file, line_start=start, line_end=end)])
+
+    dropped: list[str] = []
+    kept = _reduce_findings([finding("a.yaml", 3, 4), finding("a.yaml", 50, 51), finding("other.java", 1, 1)],
+                            "project", {"a.yaml": 10}, dropped)
+    assert [f.title for f in kept] == ["a.yaml:3"] and len(dropped) == 2

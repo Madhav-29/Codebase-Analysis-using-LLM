@@ -26,6 +26,7 @@ from .prompts import (
     DOMAIN_SYSTEM,
     PROJECT_SYSTEM,
     render_domain_prompt,
+    number_lines,
     render_project_prompt,
 )
 from .schema import ClassUnitResponse, DomainResponse, Evidence, FindingOut, LLMReducedFinding, ProjectResponse
@@ -33,7 +34,7 @@ from .tokens import estimate_tokens
 
 log = logging.getLogger(__name__)
 
-SECRET_KEY = re.compile(r"(password|secret|token|api[-_]?key|credential)", re.IGNORECASE)
+SECRET_KEY = re.compile(r"(password|passwd|secret|token|key|credential)", re.IGNORECASE)  # over-masking is harmless
 
 
 @dataclass
@@ -207,14 +208,16 @@ def _groups(items: list[str], budget: int, settings: Settings) -> list[list[str]
     return groups
 
 
-def _reduce_findings(findings: list[LLMReducedFinding], scope: str, known_files: set[str],
+def _reduce_findings(findings: list[LLMReducedFinding], scope: str, known_files: dict[str, int],
                      dropped: list[str]) -> list[FindingOut]:
+    """Keep evidence that cites a file from the input within its real line range (path -> line count)."""
     result = []
     for f in findings:
         evidence = [Evidence(file=e.file, line_start=e.line_start, line_end=e.line_end)
-                    for e in f.evidence if e.file in known_files]
+                    for e in f.evidence
+                    if e.file in known_files and 1 <= e.line_start <= e.line_end <= known_files[e.file]]
         if f.evidence and not evidence:
-            dropped.append(f"{scope}: '{f.title}' cited only files not in the input")
+            dropped.append(f"{scope}: '{f.title}' cited no file/line range from the input")
             continue
         result.append(FindingOut(category=f.category, severity=f.severity, title=f.title, detail=f.detail,
                                  scope=scope, evidence=evidence, source="llm"))
@@ -227,7 +230,7 @@ def _class_line(fqn: str, facts: ProjectFacts, mo: MapOutput) -> str:
     tf = facts.types[fqn]
     res = mo.classes[fqn]
     titles = [f.title for f in mo.findings if f.scope == fqn]
-    line = f"- {fqn} ({tf.decl.kind}, {tf.file.path}): {res.summary}"
+    line = f"- {fqn} ({tf.decl.kind}, {tf.file.path} lines {tf.decl.line_start}-{tf.decl.line_end}): {res.summary}"
     if res.responsibilities:
         line += " Responsibilities: " + "; ".join(res.responsibilities) + "."
     if titles:
@@ -294,7 +297,7 @@ def run_domain_reduce(facts: ProjectFacts, settings: Settings, runner: Structure
             out[d] = ReduceResult(None, err)
             continue
         out[d] = ReduceResult(r.parsed, None)
-        known = {t.file.path for t in facts.types.values() if t.domain == d}
+        known = {t.file.path: t.file.line_count for t in facts.types.values() if t.domain == d}
         findings += _reduce_findings(r.parsed.findings, f"domain:{d}", known, mo.dropped_findings)
     return out, findings
 
@@ -316,7 +319,8 @@ def project_context_files(facts: ProjectFacts) -> list[tuple[str, str]]:
     for f in facts.inventory.files:
         if f.category in ("build_config", "app_config") and not f.path.startswith("settings."):
             text = facts.inventory.read(f.path)
-            files.append((f.path, mask_secrets(text) if f.category == "app_config" else text))
+            text = mask_secrets(text) if f.category == "app_config" else text
+            files.append((f.path, number_lines(list(enumerate(text.splitlines(), start=1)))))
     tests = sorted(f.path for f in facts.inventory.by_category("test_java"))
     if tests:
         files.append(("(test layout)", "Test sources present (supporting context only):\n" + "\n".join(tests)))
@@ -350,6 +354,7 @@ def run_project_reduce(facts: ProjectFacts, settings: Settings, runner: Structur
                        ) -> tuple[ReduceResult, list[FindingOut]]:
     readme_path = next((f.path for f in facts.inventory.by_category("readme")), None)
     readme = facts.inventory.read(readme_path) if readme_path else "(no README)"
+    readme = number_lines(list(enumerate(readme.splitlines(), start=1)))
     context_files = project_context_files(facts)
     build_context = "\n\n".join(f"### {p}\n```\n{t}\n```" for p, t in context_files)
     digest = facts_digest(facts, deterministic_findings)
@@ -380,5 +385,5 @@ def run_project_reduce(facts: ProjectFacts, settings: Settings, runner: Structur
     if res.parsed is None:
         mo.failed_units.append(("project", res.error or "unknown error"))
         return ReduceResult(None, res.error), []
-    known = {f.path for f in facts.inventory.files}
+    known = {f.path: len(facts.inventory.read(f.path).splitlines()) for f in facts.inventory.files}
     return ReduceResult(res.parsed, None), _reduce_findings(res.parsed.findings, "project", known, mo.dropped_findings)
