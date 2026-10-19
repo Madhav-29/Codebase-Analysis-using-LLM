@@ -56,8 +56,8 @@ class PackingConfig(BaseModel):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    llm_provider: Literal["google_genai", "azure_foundry", "anthropic"] = "google_genai"
-    llm_model: str = "gemini-3.5-flash-lite"  # model id, or the deployment name on Azure
+    llm_provider: Literal["google_genai", "azure_foundry", "anthropic"] = "azure_foundry"
+    llm_model: str = "gpt-5.4-mini"  # model id, or the deployment name on Azure
     llm_temperature: float = 0.0  # sent only to models that accept sampling parameters
     # sent only to reasoning models (azure_foundry)
     llm_reasoning_effort: Literal["none", "minimal", "low", "medium", "high"] = "low"

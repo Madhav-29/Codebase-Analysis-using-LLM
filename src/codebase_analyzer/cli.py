@@ -91,7 +91,8 @@ def _setup_logging(verbose: bool) -> None:
     logging.basicConfig(
         level=logging.INFO if verbose else logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
-    for noisy in ("httpx", "httpcore", "google_genai", "anthropic", "openai"):
+    # HTTP/SDK loggers would print request URLs (with the resource name) at INFO
+    for noisy in ("httpx", "httpx2", "httpcore", "openai", "azure", "google_genai", "anthropic"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
