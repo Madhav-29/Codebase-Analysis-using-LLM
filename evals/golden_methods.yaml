@@ -1,0 +1,93 @@
+# Golden methods for evaluating LLM method descriptions (spring-rest-sakila @ 62873f7).
+# Chosen across 8 domains: the most complex non-trivial methods (CC 3-5) plus the longest
+# service and repository logic. Verdicts are human judgments against the source;
+# `codebase-analyzer eval <analysis.json> --repo <target>` renders the review sheet and scores them.
+rubric:
+  correct: States what the method does, including the branches and side effects a reader needs; nothing false.
+  partially_correct: The main behavior is right, but a path or side effect a reader needs is missing or imprecisely described.
+  incorrect: Gets the main behavior wrong, or states the opposite of what a path does.
+
+methods:
+  - file: src/main/java/com/example/app/common/util/ExpressionUtils.java
+    method: betweenExpression
+    line: 33
+    verdicts:
+      gemini-3.5-flash-lite: {verdict: correct, note: "All four branches (between, >=, <=, null)."}
+      gpt-5.4-mini: {verdict: correct, note: "All four branches."}
+
+  - file: src/main/java/com/example/app/services/catalog/controller/ActorController.java
+    method: getActorFilmList
+    line: 90
+    verdicts:
+      gemini-3.5-flash-lite: {verdict: correct, note: "Optional filters, paging, links replaced with self + actor."}
+      gpt-5.4-mini: {verdict: correct, note: "Filters from raw strings, service call, links rewritten to self + actor."}
+
+  - file: src/main/java/com/example/app/services/catalog/controller/FilmController.java
+    method: getFilmList
+    line: 38
+    verdicts:
+      gemini-3.5-flash-lite: {verdict: correct, note: "Optional category/year/rating filters and paging."}
+      gpt-5.4-mini: {verdict: correct, note: "Filters, paging, assembler; notes the unvalidated parsing can throw."}
+
+  - file: src/main/java/com/example/app/services/catalog/domain/serializer/LocalDateYearSerializer.java
+    method: serialize
+    line: 36
+    verdicts:
+      gemini-3.5-flash-lite: {verdict: correct, note: "All three output shapes (epoch day, array, year or formatted string)."}
+      gpt-5.4-mini: {verdict: partially_correct, note: "Says the non-timestamp branch writes just the year; with a formatter it writes date.format(formatter)."}
+
+  - file: src/main/java/com/example/app/common/security/JwtAuthenticationProvider.java
+    method: authenticate
+    line: 19
+    verdicts:
+      gemini-3.5-flash-lite: {verdict: partially_correct, note: "Omits the return null when the token cannot be decoded."}
+      gpt-5.4-mini: {verdict: correct, note: "Includes the return null when decoding fails."}
+
+  - file: src/main/java/com/example/app/services/location/domain/converter/GeometryConverter.java
+    method: convertToEntityAttribute
+    line: 21
+    verdicts:
+      gemini-3.5-flash-lite: {verdict: incorrect, note: "Says it returns null when parsing fails; it rethrows as RuntimeException."}
+      gpt-5.4-mini: {verdict: correct, note: "Point, rethrow on ParseException, null otherwise."}
+
+  - file: src/main/java/com/example/app/services/rental/service/RentalServiceImpl.java
+    method: rentDvd
+    line: 63
+    verdicts:
+      gemini-3.5-flash-lite: {verdict: correct, note: "Stock check, customer/staff lookup, save, payment."}
+      gpt-5.4-mini: {verdict: correct, note: "Stock check, customer/staff lookup, save, payment, DTO."}
+
+  - file: src/main/java/com/example/app/services/rental/service/RentalServiceImpl.java
+    method: returnDvd
+    line: 99
+    verdicts:
+      gemini-3.5-flash-lite: {verdict: correct, note: "Parses the map, finds the active rental, updates the return date."}
+      gpt-5.4-mini: {verdict: correct, note: "Parses the map, finds the active rental, sets the return date."}
+
+  - file: src/main/java/com/example/app/services/store/repository/custom/CustomStoreRepositoryImpl.java
+    method: findStoreDetail
+    line: 48
+    verdicts:
+      gemini-3.5-flash-lite: {verdict: partially_correct, note: "Correct but omits the staff -> address -> city joins and the projection."}
+      gpt-5.4-mini: {verdict: correct, note: "Projection of store, manager and address; optional id filter."}
+
+  - file: src/main/java/com/example/app/services/payment/service/PaymentServiceImpl.java
+    method: createPayment
+    line: 55
+    verdicts:
+      gemini-3.5-flash-lite: {verdict: correct, note: "Builds and saves the payment from request, customer, staff and rental."}
+      gpt-5.4-mini: {verdict: correct, note: "Builds from request plus related objects, saves, maps."}
+
+  - file: src/main/java/com/example/app/services/staff/repository/custom/CustomStaffRepositoryImpl.java
+    method: findStaffDetailsById
+    line: 30
+    verdicts:
+      gemini-3.5-flash-lite: {verdict: correct, note: "Wraps the first result in an Optional."}
+      gpt-5.4-mini: {verdict: correct, note: "Wraps the first result in an Optional."}
+
+  - file: src/main/java/com/example/app/services/customer/repository/custom/CustomCustomerRepositoryImpl.java
+    method: findAllCustomerRentalListByIdWithCondition
+    line: 86
+    verdicts:
+      gemini-3.5-flash-lite: {verdict: incorrect, note: "Describes the intended status filter; RENTED actually selects returned rentals and RETURNED applies no filter."}
+      gpt-5.4-mini: {verdict: partially_correct, note: "Nothing false (filter only active for RENTED), but omits that it selects returned rentals."}
