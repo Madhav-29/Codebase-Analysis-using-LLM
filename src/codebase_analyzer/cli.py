@@ -22,6 +22,16 @@ from pydantic import ValidationError
 from codebase_analyzer.analysis.facts import ProjectFacts, build_facts
 from codebase_analyzer.config import Settings, TokenBudget
 from codebase_analyzer.errors import AnalyzerError, ConfigError, ProviderQuotaExhausted
+from codebase_analyzer.evaluation import (
+    DESCRIPTION_VERDICTS,
+    FINDING_CATEGORIES,
+    description_scores,
+    finding_scores,
+    load_finding_reviews,
+    load_golden,
+    review_sheet,
+    unmatched_reviews,
+)
 from codebase_analyzer.llm.cache import ResponseCache
 from codebase_analyzer.llm.client import StructuredRunner, count_native
 from codebase_analyzer.llm.providers import make_provider
@@ -30,6 +40,7 @@ from codebase_analyzer.pipeline.map_stage import select_paths
 from codebase_analyzer.pipeline.run import run_analysis
 from codebase_analyzer.planning.chunking import Plan, plan_units
 from codebase_analyzer.prompts import CLASS_SYSTEM, PROMPT_VERSION
+from codebase_analyzer.report import render_report
 from codebase_analyzer.schema.output import AnalysisOutput
 
 app = typer.Typer(
@@ -282,3 +293,59 @@ def schema(output: Annotated[Path, typer.Option("--output")] = Path("schemas/ana
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(AnalysisOutput.model_json_schema(), indent=2) + "\n", encoding="utf-8")
     typer.echo(f"Wrote {output}")
+
+
+def _load_analysis(path: Path) -> AnalysisOutput:
+    return AnalysisOutput.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+AnalysisArg = Annotated[Path, typer.Argument(help="An analysis JSON file.")]
+
+
+@app.command()
+def report(
+    path: AnalysisArg = Path("output/analysis.json"),
+    output: Annotated[Path, typer.Option("--output")] = Path("output/analysis_report.md"),
+) -> None:
+    """Render a human-readable Markdown report from an analysis JSON file (deterministic, no LLM)."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render_report(_load_analysis(path)), encoding="utf-8", newline="\n")
+    typer.echo(f"Wrote {output}")
+
+
+@app.command("eval")
+def evaluate(
+    path: AnalysisArg,
+    repo: RepoOpt,
+    golden: Annotated[Path, typer.Option("--golden")] = Path("evals/golden_methods.yaml"),
+    findings: Annotated[Path, typer.Option("--findings")] = Path("evals/findings_review.yaml"),
+    output: Annotated[Path | None, typer.Option("--output", help="Default: evals/review_<model>.md")] = None,
+) -> None:
+    """Write a review sheet (descriptions next to source) and print the verdicts recorded for this model."""
+    analysis = _load_analysis(path)
+    model = analysis.metadata.model
+    rubric, methods = load_golden(golden)
+    root, _, _ = resolve_repo(repo)
+    sheet = output or Path("evals") / f"review_{model}.md"
+    sheet.parent.mkdir(parents=True, exist_ok=True)
+    sheet.write_text(review_sheet(analysis, rubric, methods, root), encoding="utf-8", newline="\n")
+    typer.echo(f"Wrote {sheet}")
+    scores = description_scores(methods, model)
+    typer.echo(
+        f"Descriptions ({model}): "
+        + (
+            ", ".join(f"{v} {scores.get(v, 0)}" for v in DESCRIPTION_VERDICTS) + f" of {len(methods)}"
+            if scores
+            else "no verdicts recorded"
+        )
+    )
+    reviews = load_finding_reviews(findings).get(model, []) if findings.exists() else []
+    if reviews:
+        counts = finding_scores(reviews)
+        typer.echo(
+            f"Findings ({model}, {len(reviews)} reviewed): "
+            + ", ".join(f"{c} {counts.get(c, 0)}" for c in FINDING_CATEGORIES)
+        )
+        missing = unmatched_reviews(analysis, reviews)
+        if missing:
+            typer.echo(f"warning: {len(missing)} reviewed findings are not in this analysis: {missing[:3]}", err=True)
