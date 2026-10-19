@@ -8,8 +8,17 @@ import ast
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[2] / "src" / "codebase_analyzer"
-PROVIDER_SDKS = ("langchain_google_genai", "langchain_azure_ai", "langchain_openai", "langchain_anthropic",
-                 "google.genai", "openai", "anthropic", "azure", "tiktoken")
+PROVIDER_SDKS = (
+    "langchain_google_genai",
+    "langchain_azure_ai",
+    "langchain_openai",
+    "langchain_anthropic",
+    "google.genai",
+    "openai",
+    "anthropic",
+    "azure",
+    "tiktoken",
+)
 FORBIDDEN = {  # layer -> internal layers it must not import
     "analysis": {"planning", "llm", "pipeline", "cli"},
     "planning": {"llm", "pipeline", "cli"},
@@ -53,8 +62,10 @@ def test_provider_sdks_are_imported_only_in_llm_providers():
     providers = PKG / "llm" / "providers"
     violations = [
         f"{path.relative_to(PKG)} imports {mod}"
-        for path in sorted(PKG.rglob("*.py")) if providers not in path.parents
-        for mod in _imports(path) if mod.startswith(PROVIDER_SDKS)
+        for path in sorted(PKG.rglob("*.py"))
+        if providers not in path.parents
+        for mod in _imports(path)
+        if mod.startswith(PROVIDER_SDKS)
     ]
     assert violations == []
 

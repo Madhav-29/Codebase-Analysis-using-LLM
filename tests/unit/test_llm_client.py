@@ -1,27 +1,50 @@
 import pytest
+from langchain_core.exceptions import ModelAuthenticationError, ModelRateLimitError
 from pydantic import ValidationError
 
-from codebase_analyzer.pipeline.map_stage import _unit_validator
-from codebase_analyzer.llm.cache import ResponseCache
-from codebase_analyzer.planning.chunking import plan_units
-from codebase_analyzer.config import Settings
 from codebase_analyzer.analysis.facts import build_facts
-from langchain_core.exceptions import ModelAuthenticationError, ModelRateLimitError
-
+from codebase_analyzer.config import Settings
 from codebase_analyzer.errors import ProviderAuthError, ProviderQuotaExhausted
+from codebase_analyzer.llm.cache import ResponseCache
 from codebase_analyzer.llm.client import LLMRequest, StructuredRunner
+from codebase_analyzer.pipeline.map_stage import _unit_validator
+from codebase_analyzer.planning.chunking import plan_units
 from codebase_analyzer.schema.responses import ClassUnitResponse, DomainResponse
 
 from ..fakes import FakeStructuredModel, class_payload, fake_provider
 
-VALID = {"classes": [{"type_key": "A", "summary": "s", "responsibilities": [], "findings": [],
-                      "methods": [{"member_key": "m1", "description": "d"}]}]}
+VALID = {
+    "classes": [
+        {
+            "type_key": "A",
+            "summary": "s",
+            "responsibilities": [],
+            "findings": [],
+            "methods": [{"member_key": "m1", "description": "d"}],
+        }
+    ]
+}
 
 
 def test_schema_accepts_valid_and_rejects_invalid_responses():
     assert ClassUnitResponse.model_validate(VALID).classes[0].methods[0].member_key == "m1"
-    bad_enum = {"classes": [{**VALID["classes"][0], "findings": [
-        {"category": "vibes", "severity": "info", "title": "t", "detail": "d", "line_start": 1, "line_end": 1}]}]}
+    bad_enum = {
+        "classes": [
+            {
+                **VALID["classes"][0],
+                "findings": [
+                    {
+                        "category": "vibes",
+                        "severity": "info",
+                        "title": "t",
+                        "detail": "d",
+                        "line_start": 1,
+                        "line_end": 1,
+                    }
+                ],
+            }
+        ]
+    }
     with pytest.raises(ValidationError):
         ClassUnitResponse.model_validate(bad_enum)
     with pytest.raises(ValidationError):
@@ -51,7 +74,9 @@ def test_unit_validator_requires_exact_type_and_member_keys(make_repo):
     with pytest.raises(ValueError, match="unknown type keys"):
         validate(ClassUnitResponse.model_validate(extra))
     # packs tolerate a missing class (it is retried individually) but not missing members of returned classes
-    _unit_validator(unit, require_all_types=False)(ClassUnitResponse.model_validate(class_payload(user, drop_types={"A.B"})))
+    _unit_validator(unit, require_all_types=False)(
+        ClassUnitResponse.model_validate(class_payload(user, drop_types={"A.B"}))
+    )
 
 
 def _req(validator=None):
@@ -119,8 +144,11 @@ def test_cache_replays_without_calling_the_model(tmp_path):
 
 
 def test_rate_limit_backs_off_exponentially_and_honors_server_hint():
-    errors = [ModelRateLimitError("429 RESOURCE_EXHAUSTED"), ModelRateLimitError("429 RESOURCE_EXHAUSTED"),
-              ModelRateLimitError("429 RESOURCE_EXHAUSTED. Please retry in 7.5s.")]
+    errors = [
+        ModelRateLimitError("429 RESOURCE_EXHAUSTED"),
+        ModelRateLimitError("429 RESOURCE_EXHAUSTED"),
+        ModelRateLimitError("429 RESOURCE_EXHAUSTED. Please retry in 7.5s."),
+    ]
     fake = FakeStructuredModel(lambda s, u, n: errors[n - 1] if n <= 3 else DOMAIN_OK)
     runner = _runner(fake, Settings(llm_backoff_initial_s=10, llm_backoff_max_s=15))
     assert runner.run([_req()], "t")["r1"].parsed is not None

@@ -8,10 +8,15 @@ descriptions on top of this; they never change these facts.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from codebase_analyzer.config import Settings
+from codebase_analyzer.analysis.endpoints import Endpoint, read_context_path, resolve_endpoints
+from codebase_analyzer.analysis.grouping import base_package, domain_for
+from codebase_analyzer.analysis.inventory import Inventory, build_inventory
+from codebase_analyzer.analysis.java_parser import JavaFile, Member, TypeDecl, parse_java
+from codebase_analyzer.analysis.metrics import Complexity, member_complexity
 from codebase_analyzer.analysis.rules import (
     DeterministicDescription,
     describe_abstract,
@@ -19,11 +24,7 @@ from codebase_analyzer.analysis.rules import (
     framework_notes,
     implementations_index,
 )
-from codebase_analyzer.analysis.endpoints import Endpoint, read_context_path, resolve_endpoints
-from codebase_analyzer.analysis.grouping import base_package, domain_for
-from codebase_analyzer.analysis.inventory import Inventory, build_inventory
-from codebase_analyzer.analysis.java_parser import JavaFile, Member, TypeDecl, parse_java
-from codebase_analyzer.analysis.metrics import Complexity, member_complexity
+from codebase_analyzer.config import Settings
 
 
 @dataclass
@@ -58,7 +59,7 @@ class ProjectFacts:
     context_path: str
     base_package: str
 
-    def members(self):
+    def members(self) -> Iterator[MemberFact]:
         for t in self.types.values():
             yield from t.members
 
@@ -90,8 +91,11 @@ def build_facts(root: Path, settings: Settings) -> ProjectFacts:
         for top in jf.types:
             for decl in top.walk():
                 fact = TypeFact(
-                    decl=decl, file=jf, domain=domain_for(jf.package, base),
-                    top_level=top.fqn, framework_notes=framework_notes(decl, jf),
+                    decl=decl,
+                    file=jf,
+                    domain=domain_for(jf.package, base),
+                    top_level=top.fqn,
+                    framework_notes=framework_notes(decl, jf),
                 )
                 for m in decl.members:
                     det = describe_trivial(m, decl) or describe_abstract(m, decl, impls)
@@ -100,6 +104,11 @@ def build_facts(root: Path, settings: Settings) -> ProjectFacts:
 
     context_path = read_context_path(root / "src/main/resources")
     return ProjectFacts(
-        root=root, inventory=inventory, files=files, types=types,
-        endpoints=resolve_endpoints(files, context_path), context_path=context_path, base_package=base,
+        root=root,
+        inventory=inventory,
+        files=files,
+        types=types,
+        endpoints=resolve_endpoints(files, context_path),
+        context_path=context_path,
+        base_package=base,
     )

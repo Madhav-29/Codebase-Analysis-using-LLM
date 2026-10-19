@@ -12,9 +12,9 @@ def _endpoints(fixture_source, context_path="/api/v1"):
 def test_context_class_and_method_paths_are_combined(fixture_source):
     eps = _endpoints(fixture_source)
     assert set(eps) == {
-        ("GET", "/api/v1/orders"),          # path = ""
-        ("GET", "/api/v1/orders/all"),      # second entry of the path array
-        ("PUT", "/api/v1/orders/{id}"),     # @RequestMapping(method = {PUT, PATCH})
+        ("GET", "/api/v1/orders"),  # path = ""
+        ("GET", "/api/v1/orders/all"),  # second entry of the path array
+        ("PUT", "/api/v1/orders/{id}"),  # @RequestMapping(method = {PUT, PATCH})
         ("PATCH", "/api/v1/orders/{id}"),
         ("DELETE", "/api/v1/orders/{id}"),  # unnamed value argument
     }

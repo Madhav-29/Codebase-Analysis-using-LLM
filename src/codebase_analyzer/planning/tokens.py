@@ -15,4 +15,3 @@ import math
 
 def estimate_tokens(text: str, chars_per_token: float) -> int:
     return math.ceil(len(text) / chars_per_token)
-

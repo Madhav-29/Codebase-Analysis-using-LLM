@@ -15,8 +15,17 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 FindingCategory = Literal[
-    "potential_bug", "error_handling", "validation", "transactions", "security", "performance",
-    "maintainability", "design_pattern", "data_access", "api_design", "configuration",
+    "potential_bug",
+    "error_handling",
+    "validation",
+    "transactions",
+    "security",
+    "performance",
+    "maintainability",
+    "design_pattern",
+    "data_access",
+    "api_design",
+    "configuration",
     "documentation_mismatch",
 ]
 Severity = Literal["info", "low", "medium", "high"]
@@ -33,7 +42,9 @@ class LLMFinding(BaseModel):
 
 class LLMMethod(BaseModel):
     member_key: str = Field(description="The member key exactly as given, e.g. 'm3'.")
-    description: str = Field(description="1-3 sentences: what the member does, based only on the shown code. 'unknown' if not determinable.")
+    description: str = Field(
+        description="1-3 sentences: what the member does, based only on the shown code. 'unknown' if not determinable."
+    )
 
 
 class LLMClass(BaseModel):

@@ -107,22 +107,22 @@ def controller_endpoints(jf: JavaFile, decl: TypeDecl, context_path: str) -> lis
             for class_path, class_unresolved in _paths(class_mapping):
                 for method_path, method_unresolved in _paths(ann):
                     for http_method in _http_methods(ann):
-                        endpoints.append(Endpoint(
-                            http_method=http_method,
-                            path=join_path(context_path, class_path, method_path),
-                            controller=decl.fqn,
-                            handler_method=member.name,
-                            signature=member.signature,
-                            file=jf.path,
-                            line=member.line_start,
-                            security=tuple(class_security + _security(member.annotations)),
-                            unresolved=class_unresolved or method_unresolved,
-                        ))
+                        endpoints.append(
+                            Endpoint(
+                                http_method=http_method,
+                                path=join_path(context_path, class_path, method_path),
+                                controller=decl.fqn,
+                                handler_method=member.name,
+                                signature=member.signature,
+                                file=jf.path,
+                                line=member.line_start,
+                                security=tuple(class_security + _security(member.annotations)),
+                                unresolved=class_unresolved or method_unresolved,
+                            )
+                        )
     return endpoints
 
 
 def resolve_endpoints(files: list[JavaFile], context_path: str) -> list[Endpoint]:
-    result = [
-        ep for jf in files for decl in jf.all_types() for ep in controller_endpoints(jf, decl, context_path)
-    ]
+    result = [ep for jf in files for decl in jf.all_types() for ep in controller_endpoints(jf, decl, context_path)]
     return sorted(result, key=lambda e: (e.path, e.http_method))

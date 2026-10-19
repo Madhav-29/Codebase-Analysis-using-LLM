@@ -46,11 +46,17 @@ from codebase_analyzer.llm.providers import Provider
 
 log = logging.getLogger(__name__)
 
-Validator = Callable[[BaseModel], None]  # raises ValueError with a readable message
+Validator = Callable[[Any], None]  # gets the parsed schema instance; raises ValueError with a readable message
 Outcome = Literal["fatal", "quota", "transient", "error"]
 
-TRANSIENT_ERRORS = (ModelRateLimitError, ModelAPIError, ModelConnectionError, ModelTimeoutError,
-                    TimeoutError, ConnectionError)
+TRANSIENT_ERRORS = (
+    ModelRateLimitError,
+    ModelAPIError,
+    ModelConnectionError,
+    ModelTimeoutError,
+    TimeoutError,
+    ConnectionError,
+)
 FATAL_ERRORS = (ModelAuthenticationError, ModelPermissionDeniedError, ModelNotFoundError)
 # Gemini puts the suggested wait in the 429 body: "'retryDelay': '23s'" or "Please retry in 23.5s".
 _RETRY_HINT = re.compile(r"retry(?:Delay['\"]?:\s*['\"]|\s+in\s+)(\d+(?:\.\d+)?)s", re.IGNORECASE)
@@ -149,8 +155,15 @@ class StructuredRunner:
 
     def _key(self, req: LLMRequest) -> str:
         p = self.provider
-        return cache_key(prompt_version=self.prompt_version, provider=p.name, model=p.model, temperature=p.temperature,
-                         schema=req.schema, system=req.system, user=req.user)
+        return cache_key(
+            prompt_version=self.prompt_version,
+            provider=p.name,
+            model=p.model,
+            temperature=p.temperature,
+            schema=req.schema,
+            system=req.system,
+            user=req.user,
+        )
 
     def _validate(self, req: LLMRequest, parsed: BaseModel) -> None:
         # Re-validate locally even though the provider enforced the schema.
@@ -176,7 +189,8 @@ class StructuredRunner:
                 log.warning("ignoring invalid cache entry for %s: %s", req.id, exc)
 
         runnable = self.provider.chat_model.with_structured_output(
-            req.schema, include_raw=True, **self.provider.structured_output)
+            req.schema, include_raw=True, **self.provider.structured_output
+        )
         feedback: str | None = None
         total_in = total_out = 0
         for attempt in range(1, self.settings.llm_max_attempts + 1):
@@ -224,8 +238,10 @@ class StructuredRunner:
     def _messages(req: LLMRequest, feedback: str | None) -> list[BaseMessage]:
         user = req.user
         if feedback:
-            user += ("\n\nYour previous response to this request was rejected by validation: "
-                     f"{feedback}\nReturn a corrected, complete response.")
+            user += (
+                "\n\nYour previous response to this request was rejected by validation: "
+                f"{feedback}\nReturn a corrected, complete response."
+            )
         return [SystemMessage(req.system), HumanMessage(user)]
 
     @staticmethod

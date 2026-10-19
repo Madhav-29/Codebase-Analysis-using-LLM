@@ -6,13 +6,14 @@ Facts and LLM content live side by side; every LLM-written field carries a
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
 from codebase_analyzer.schema.responses import CrossCuttingConcern
 
 SCHEMA_VERSION = "1.0"
+
 
 class Usage(BaseModel):
     """llm_calls/input_tokens/output_tokens are live calls in this run; cache_hits were replayed from the
@@ -36,8 +37,8 @@ class Metadata(BaseModel):
     model: str
     temperature: float | None  # None: the model uses fixed sampling and ignores it
     temperature_note: str | None
-    token_budget: dict
-    packing: dict
+    token_budget: dict[str, Any]
+    packing: dict[str, Any]
     context_path: str
     usage: Usage
     max_classes: int | None

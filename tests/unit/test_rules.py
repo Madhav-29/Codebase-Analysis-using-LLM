@@ -1,6 +1,6 @@
-from codebase_analyzer.analysis.rules import describe_abstract, describe_trivial, framework_notes, implementations_index
 from codebase_analyzer.analysis.grouping import base_package, domain_for
 from codebase_analyzer.analysis.java_parser import parse_java
+from codebase_analyzer.analysis.rules import describe_abstract, describe_trivial, framework_notes, implementations_index
 
 SRC = """package p;
 @Getter @Builder @RequiredArgsConstructor

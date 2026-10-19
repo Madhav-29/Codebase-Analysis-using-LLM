@@ -12,12 +12,21 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import Any, cast
 
 from pydantic import BaseModel
 
 
-def cache_key(*, prompt_version: str, provider: str, model: str, temperature: float | None,
-              schema: type[BaseModel], system: str, user: str) -> str:
+def cache_key(
+    *,
+    prompt_version: str,
+    provider: str,
+    model: str,
+    temperature: float | None,
+    schema: type[BaseModel],
+    system: str,
+    user: str,
+) -> str:
     payload = json.dumps(
         {
             "prompt_version": prompt_version,
@@ -41,11 +50,11 @@ class ResponseCache:
     def _path(self, key: str) -> Path:
         return self.directory / key[:2] / f"{key}.json"
 
-    def get(self, key: str) -> dict | None:
+    def get(self, key: str) -> dict[str, Any] | None:
         path = self._path(key)
         if not path.exists():
             return None
-        return json.loads(path.read_text(encoding="utf-8"))
+        return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
     def put(self, key: str, parsed: BaseModel, usage: dict[str, int]) -> None:
         path = self._path(key)

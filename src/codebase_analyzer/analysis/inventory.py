@@ -13,8 +13,12 @@ from pathlib import Path
 EXCLUDED_DIRS = {".git", ".gradle", ".idea", ".vscode", "build", "out", "target", "node_modules", "bin"}
 BINARY_EXTENSIONS = {".jar", ".class", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".zip", ".gz", ".pdf"}
 CONTEXT_FILES = {
-    "build.gradle.kts", "build.gradle", "settings.gradle.kts", "pom.xml",
-    "gradle/libs.versions.toml", "README.md",
+    "build.gradle.kts",
+    "build.gradle",
+    "settings.gradle.kts",
+    "pom.xml",
+    "gradle/libs.versions.toml",
+    "README.md",
 }
 
 

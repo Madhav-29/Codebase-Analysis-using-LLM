@@ -35,12 +35,16 @@ def select_key_methods(facts: ProjectFacts, settings: Settings) -> list[KeySelec
                 continue
             eps = routes.get((fqn, m.line_start), [])
             public = "public" in m.modifiers
-            reasons = tuple(r for r, hit in (
-                ("endpoint_handler", bool(eps)),
-                ("service_api", public and "Service" in stereotypes),
-                ("data_access", public and "Repository" in stereotypes),
-                ("complex", bool(mf.complexity and mf.complexity.cyclomatic >= moderate)),
-            ) if hit)
+            reasons = tuple(
+                r
+                for r, hit in (
+                    ("endpoint_handler", bool(eps)),
+                    ("service_api", public and "Service" in stereotypes),
+                    ("data_access", public and "Repository" in stereotypes),
+                    ("complex", bool(mf.complexity and mf.complexity.cyclomatic >= moderate)),
+                )
+                if hit
+            )
             if reasons:
                 result.append(KeySelection(mf.id, fqn, reasons, tuple(eps)))
     return result

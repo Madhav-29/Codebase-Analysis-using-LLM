@@ -72,7 +72,5 @@ class Settings(BaseSettings):
     cache_dir: Path = Path(".cache/llm")
     use_cache: bool = True
 
-    complexity_thresholds: dict[str, int] = Field(
-        default_factory=lambda: {"moderate": 6, "high": 11, "very_high": 21}
-    )
+    complexity_thresholds: dict[str, int] = Field(default_factory=lambda: {"moderate": 6, "high": 11, "very_high": 21})
     top_complex_methods: int = 10

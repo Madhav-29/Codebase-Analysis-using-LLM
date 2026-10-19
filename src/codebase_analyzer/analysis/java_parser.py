@@ -7,6 +7,7 @@ Everything here is a deterministic fact; nothing is inferred.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import tree_sitter_java
@@ -91,7 +92,7 @@ class TypeDecl:
     enum_constants: list[str] = field(default_factory=list)
     record_components: list[Parameter] = field(default_factory=list)
 
-    def walk(self):
+    def walk(self) -> Iterator[TypeDecl]:
         """Yield this type and all nested types, depth first."""
         yield self
         for n in self.nested:
@@ -108,13 +109,13 @@ class JavaFile:
     line_count: int
     has_errors: bool  # tree-sitter reported a syntax error somewhere
 
-    def all_types(self):
+    def all_types(self) -> Iterator[TypeDecl]:
         for t in self.types:
             yield from t.walk()
 
 
 def _text(node: Node | None) -> str:
-    return node.text.decode("utf-8") if node is not None else ""
+    return node.text.decode("utf-8") if node is not None and node.text is not None else ""
 
 
 def _line(node: Node) -> int:
@@ -139,8 +140,8 @@ def _modifiers(node: Node) -> tuple[list[str], list[Annotation]]:
     return mods, anns
 
 
-def _annotation_value(node: Node) -> str | list[str]:
-    if node.type == "element_value_array_initializer":
+def _annotation_value(node: Node | None) -> str | list[str]:
+    if node is not None and node.type == "element_value_array_initializer":
         return [_text(c) for c in node.named_children]
     return _text(node)
 
@@ -169,7 +170,9 @@ def _parameters(params_node: Node | None) -> list[Parameter]:
         elif p.type == "spread_parameter":
             type_node = next(c for c in p.named_children if c.type not in ("modifiers", "variable_declarator"))
             declarator = next(c for c in p.named_children if c.type == "variable_declarator")
-            result.append(Parameter(_text(declarator.child_by_field_name("name")), _text(type_node), anns, varargs=True))
+            result.append(
+                Parameter(_text(declarator.child_by_field_name("name")), _text(type_node), anns, varargs=True)
+            )
     return result
 
 
@@ -229,13 +232,20 @@ def _type_decl(node: Node, prefix: str) -> TypeDecl:
         implements = _type_list(node.child_by_field_name("interfaces"))
 
     header_end = body.start_byte if body is not None else node.end_byte
-    header = node.text[: header_end - node.start_byte].decode("utf-8").strip()
+    header = (node.text or b"")[: header_end - node.start_byte].decode("utf-8").strip()
 
     decl = TypeDecl(
-        name=name, fqn=fqn, kind=kind, modifiers=mods, annotations=anns,
-        extends=extends, implements=implements,
+        name=name,
+        fqn=fqn,
+        kind=kind,
+        modifiers=mods,
+        annotations=anns,
+        extends=extends,
+        implements=implements,
         type_parameters=_text(tparams) if tparams else None,
-        line_start=_line(node), line_end=_end_line(node), header=header,
+        line_start=_line(node),
+        line_end=_end_line(node),
+        header=header,
     )
     if kind == "record":
         decl.record_components = _parameters(node.child_by_field_name("parameters"))
@@ -275,7 +285,11 @@ def parse_java(source: str, path: str = "<memory>") -> JavaFile:
         elif child.type in TYPE_NODES:
             types.append(_type_decl(child, package))
     return JavaFile(
-        path=path, package=package, imports=imports, types=types, source=source,
+        path=path,
+        package=package,
+        imports=imports,
+        types=types,
+        source=source,
         line_count=source.count("\n") + (0 if source.endswith("\n") else 1),
         has_errors=root.has_error,
     )

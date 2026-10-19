@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from codebase_analyzer.analysis.facts import ProjectFacts
@@ -43,6 +44,7 @@ class MapOutput:
 
 # ------------------------------------------------------------------ selection
 
+
 def select_paths(facts: ProjectFacts, max_classes: int | None) -> list[str]:
     """All main source files, or the first N picked round-robin across domains."""
     by_domain: dict[str, list[str]] = defaultdict(list)
@@ -61,7 +63,8 @@ def select_paths(facts: ProjectFacts, max_classes: int | None) -> list[str]:
 
 # ------------------------------------------------------------------ map
 
-def _unit_validator(unit: Unit, require_all_types: bool):
+
+def _unit_validator(unit: Unit, require_all_types: bool) -> Callable[[ClassUnitResponse], None]:
     def validate(resp: ClassUnitResponse) -> None:
         seen_types = [c.type_key for c in resp.classes]
         unknown = set(seen_types) - set(unit.type_keys)
@@ -89,8 +92,13 @@ def _unit_validator(unit: Unit, require_all_types: bool):
 
 
 def _class_request(unit: Unit) -> LLMRequest:
-    return LLMRequest(unit.id, CLASS_SYSTEM, unit.user_text, ClassUnitResponse,
-                      _unit_validator(unit, require_all_types=unit.kind != "pack"))
+    return LLMRequest(
+        unit.id,
+        CLASS_SYSTEM,
+        unit.user_text,
+        ClassUnitResponse,
+        _unit_validator(unit, require_all_types=unit.kind != "pack"),
+    )
 
 
 def run_map(facts: ProjectFacts, settings: Settings, runner: StructuredRunner, paths: list[str]) -> MapOutput:
@@ -135,7 +143,8 @@ def run_map(facts: ProjectFacts, settings: Settings, runner: StructuredRunner, p
 
 def _unkey(text: str, unit: Unit) -> str:
     """Replace prompt member keys (e.g. 'm8') the model echoed into prose with the method name."""
-    def name(m: re.Match) -> str:
+
+    def name(m: re.Match[str]) -> str:
         member_id = unit.member_keys.get(m.group(0))
         return f"{member_id.split('#', 1)[1].split('(', 1)[0]}()" if member_id else m.group(0)
 
@@ -160,12 +169,20 @@ def _merge_unit(unit: Unit, resp: ClassUnitResponse, facts: ProjectFacts, out: M
         for f in cls.findings:
             if not (1 <= f.line_start <= f.line_end <= tf.file.line_count):
                 out.dropped_findings.append(
-                    f"{fqn}: '{f.title}' cited lines {f.line_start}-{f.line_end} outside file (1-{tf.file.line_count})")
+                    f"{fqn}: '{f.title}' cited lines {f.line_start}-{f.line_end} outside file (1-{tf.file.line_count})"
+                )
                 continue
-            out.findings.append(FindingOut(
-                category=f.category, severity=f.severity, title=_unkey(f.title, unit), detail=_unkey(f.detail, unit),
-                scope=fqn,
-                evidence=[Evidence(file=tf.file.path, line_start=f.line_start, line_end=f.line_end)], source="llm"))
+            out.findings.append(
+                FindingOut(
+                    category=f.category,
+                    severity=f.severity,
+                    title=_unkey(f.title, unit),
+                    detail=_unkey(f.detail, unit),
+                    scope=fqn,
+                    evidence=[Evidence(file=tf.file.path, line_start=f.line_start, line_end=f.line_end)],
+                    source="llm",
+                )
+            )
     for member_id, texts in member_text.items():
         if member_id in unit.segmented_members:
             prev = out.descriptions.get(member_id)

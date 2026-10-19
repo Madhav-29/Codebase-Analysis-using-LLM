@@ -1,6 +1,6 @@
-from codebase_analyzer.planning.chunking import plan_units
-from codebase_analyzer.config import Settings, TokenBudget
 from codebase_analyzer.analysis.facts import build_facts
+from codebase_analyzer.config import Settings, TokenBudget
+from codebase_analyzer.planning.chunking import plan_units
 
 SEPARATOR = "\n    ...\n"  # between the skeleton and the member bodies of a split part
 
@@ -19,8 +19,12 @@ def _method(i: int, lines: int = 8) -> str:
 
 def _big_class(n_methods: int, giant_lines: int = 0) -> str:
     giant = _method(999, giant_lines) if giant_lines else ""
-    return ("package com.acme.calc;\n\npublic class Calculator {\n    private int state;\n"
-            + "".join(_method(i) for i in range(n_methods)) + giant + "}\n")
+    return (
+        "package com.acme.calc;\n\npublic class Calculator {\n    private int state;\n"
+        + "".join(_method(i) for i in range(n_methods))
+        + giant
+        + "}\n"
+    )
 
 
 def _small_settings(request_tokens: int) -> Settings:
@@ -87,8 +91,10 @@ def test_file_that_cannot_fit_is_reported_not_truncated(make_repo):
 
 
 def test_small_classes_are_packed_within_package_only(make_repo):
-    files = {f"com/acme/a/dto/Dto{i}.java": f"package com.acme.a.dto;\n@Getter\npublic class Dto{i} {{ private int x; }}\n"
-             for i in range(10)}
+    files = {
+        f"com/acme/a/dto/Dto{i}.java": f"package com.acme.a.dto;\n@Getter\npublic class Dto{i} {{ private int x; }}\n"
+        for i in range(10)
+    }
     files["com/acme/a/other/Lonely.java"] = "package com.acme.a.other;\npublic class Lonely { private int y; }\n"
     settings = Settings()
     _, plan = _plan(make_repo(files), settings)

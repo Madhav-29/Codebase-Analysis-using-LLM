@@ -17,10 +17,17 @@ def make(settings: Settings) -> Provider:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise ConfigError("ANTHROPIC_API_KEY is not set. Put it in .env (see .env.example).")
     chat_model = ChatAnthropic(
-        model=settings.llm_model, max_tokens=settings.budget.output_reserve, timeout=settings.llm_timeout_s,
+        model=settings.llm_model,
+        max_tokens=settings.budget.output_reserve,
+        timeout=settings.llm_timeout_s,
         temperature=settings.llm_temperature,
         max_retries=0,  # the client owns backoff
     )
-    return Provider(name="anthropic", model=settings.llm_model, chat_model=chat_model,
-                    temperature=settings.llm_temperature, temperature_note=None,
-                    concurrency=settings.llm_concurrency or DEFAULT_CONCURRENCY)
+    return Provider(
+        name="anthropic",
+        model=settings.llm_model,
+        chat_model=chat_model,
+        temperature=settings.llm_temperature,
+        temperature_note=None,
+        concurrency=settings.llm_concurrency or DEFAULT_CONCURRENCY,
+    )

@@ -28,17 +28,32 @@ def applied_temperature(settings: Settings) -> float | None:
 
 def make(settings: Settings) -> Provider:
     if not (os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")):
-        raise ConfigError("GOOGLE_API_KEY is not set. Get a key at https://aistudio.google.com/apikey "
-                          "and put it in .env (see .env.example).")
+        raise ConfigError(
+            "GOOGLE_API_KEY is not set. Get a key at https://aistudio.google.com/apikey "
+            "and put it in .env (see .env.example)."
+        )
     temperature = applied_temperature(settings)
     sampling = {"temperature": temperature} if temperature is not None else {}
     chat_model = ChatGoogleGenerativeAI(
-        model=settings.llm_model, max_tokens=settings.budget.output_reserve, timeout=settings.llm_timeout_s,
+        model=settings.llm_model,
+        max_tokens=settings.budget.output_reserve,
+        timeout=settings.llm_timeout_s,
         max_retries=1,  # 1 means "no SDK retries" in google-genai; the client owns backoff
         **sampling,
     )
-    note = None if temperature is not None else (
-        f"Not sent: {settings.llm_model} uses fixed sampling defaults and ignores temperature. "
-        "Reproducibility comes from the response cache.")
-    return Provider(name="google_genai", model=settings.llm_model, chat_model=chat_model, temperature=temperature,
-                    temperature_note=note, concurrency=settings.llm_concurrency or DEFAULT_CONCURRENCY)
+    note = (
+        None
+        if temperature is not None
+        else (
+            f"Not sent: {settings.llm_model} uses fixed sampling defaults and ignores temperature. "
+            "Reproducibility comes from the response cache."
+        )
+    )
+    return Provider(
+        name="google_genai",
+        model=settings.llm_model,
+        chat_model=chat_model,
+        temperature=temperature,
+        temperature_note=note,
+        concurrency=settings.llm_concurrency or DEFAULT_CONCURRENCY,
+    )

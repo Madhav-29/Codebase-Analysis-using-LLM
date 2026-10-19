@@ -22,8 +22,9 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Literal
 
-from codebase_analyzer.config import Settings
 from codebase_analyzer.analysis.facts import MemberFact, ProjectFacts, TypeFact
+from codebase_analyzer.config import Settings
+from codebase_analyzer.planning.tokens import estimate_tokens
 from codebase_analyzer.prompts import (
     CLASS_SYSTEM,
     ClassPrompt,
@@ -34,7 +35,6 @@ from codebase_analyzer.prompts import (
     render_class_prompt,
 )
 from codebase_analyzer.schema.responses import ClassUnitResponse
-from codebase_analyzer.planning.tokens import estimate_tokens
 
 MIN_PART_TOKENS = 400  # below this, a split part cannot hold meaningful code
 
@@ -73,10 +73,11 @@ def fixed_overhead(settings: Settings) -> int:
 
 def _type_key(fact: TypeFact, facts: ProjectFacts) -> str:
     pkg = fact.file.package
-    return fact.decl.fqn[len(pkg) + 1:] if pkg else fact.decl.fqn
+    return fact.decl.fqn[len(pkg) + 1 :] if pkg else fact.decl.fqn
 
 
 # ------------------------------------------------------------ supporting context
+
 
 def _skeleton(fact: TypeFact, facts: ProjectFacts) -> str:
     d = fact.decl
@@ -101,7 +102,9 @@ def build_context(path: str, facts: ProjectFacts, settings: Settings) -> tuple[s
     own = {t.decl.name for t in facts.types_in_file(path)}
     top_level = {t.decl.name: t for t in facts.types.values() if t.top_level == t.decl.fqn}
     source = next(f.source for f in facts.files if f.path == path)
-    counts = Counter(tok for tok in re.findall(r"\b[A-Z][A-Za-z0-9_]*\b", source) if tok in top_level and tok not in own)
+    counts = Counter(
+        tok for tok in re.findall(r"\b[A-Z][A-Za-z0-9_]*\b", source) if tok in top_level and tok not in own
+    )
 
     cap = settings.budget.supporting_context_tokens
     used = 0
@@ -120,8 +123,10 @@ def build_context(path: str, facts: ProjectFacts, settings: Settings) -> tuple[s
 
 # ------------------------------------------------------------ blocks
 
-def _requests(types: list[TypeFact], facts: ProjectFacts, members: list[tuple[TypeFact, MemberFact]],
-              counter: list[int]) -> tuple[list[TypeRequest], list[MemberRequest], dict[str, str], dict[str, str]]:
+
+def _requests(
+    types: list[TypeFact], facts: ProjectFacts, members: list[tuple[TypeFact, MemberFact]], counter: list[int]
+) -> tuple[list[TypeRequest], list[MemberRequest], dict[str, str], dict[str, str]]:
     type_reqs = [TypeRequest(_type_key(t, facts), t.decl.kind, t.decl.line_start, t.decl.line_end) for t in types]
     type_keys = {_type_key(t, facts): t.decl.fqn for t in types}
     member_reqs: list[MemberRequest] = []
@@ -135,11 +140,13 @@ def _requests(types: list[TypeFact], facts: ProjectFacts, members: list[tuple[Ty
     return type_reqs, member_reqs, type_keys, member_keys
 
 
-_DETERMINISTIC_NOTE = ("Members not listed above are boilerplate or described elsewhere; "
-                       "they are shown for context and may be cited in findings.")
+_DETERMINISTIC_NOTE = (
+    "Members not listed above are boilerplate or described elsewhere; "
+    "they are shown for context and may be cited in findings."
+)
 
 
-def _file_block(path: str, facts: ProjectFacts, counter: list[int]) -> tuple[CodeBlock, dict, dict]:
+def _file_block(path: str, facts: ProjectFacts, counter: list[int]) -> tuple[CodeBlock, dict[str, str], dict[str, str]]:
     types = facts.types_in_file(path)
     jf = types[0].file
     lines = list(enumerate(jf.source.splitlines(), start=1))
@@ -166,6 +173,7 @@ def _max_cyclomatic(path: str, facts: ProjectFacts) -> int:
 
 # ------------------------------------------------------------ splitting
 
+
 def _split_file(path: str, facts: ProjectFacts, settings: Settings, overhead: int) -> list[Unit]:
     types = facts.types_in_file(path)
     jf = types[0].file
@@ -187,14 +195,20 @@ def _split_file(path: str, facts: ProjectFacts, settings: Settings, overhead: in
     context, omitted = build_context(path, facts, settings)
     limit = settings.budget.input_limit
 
-    def part_prompt(code: str, members, note: str, counter, ctx):
+    def part_prompt(
+        code: str, members: list[tuple[TypeFact, MemberFact]], note: str, counter: list[int], ctx: str | None
+    ) -> tuple[ClassPrompt, dict[str, str], dict[str, str], list[MemberRequest]]:
         treq, mreq, tkeys, mkeys = _requests(types, facts, members, counter)
-        block = CodeBlock(path, types[0].domain, code, treq, mreq, part_note=note, deterministic_note=_DETERMINISTIC_NOTE)
+        block = CodeBlock(
+            path, types[0].domain, code, treq, mreq, part_note=note, deterministic_note=_DETERMINISTIC_NOTE
+        )
         return ClassPrompt([block], ctx, omitted if ctx else []), tkeys, mkeys, mreq
 
     def note_for(i: int, n: int) -> str:
-        return (f"NOTE: this file was split into {n} parts to fit the token budget; this is part {i}. "
-                "The skeleton above the '...' shows every member as a placeholder line; full bodies follow it.")
+        return (
+            f"NOTE: this file was split into {n} parts to fit the token budget; this is part {i}. "
+            "The skeleton above the '...' shows every member as a placeholder line; full bodies follow it."
+        )
 
     probe_code = skeleton_code + "\n    ...\n"
     probe, _, _, _ = part_prompt(probe_code, [], note_for(99, 99), [0], context)
@@ -216,7 +230,7 @@ def _split_file(path: str, facts: ProjectFacts, settings: Settings, overhead: in
         return estimate_tokens(number_lines(lines) + "\n" + request, settings.budget.chars_per_token) + 4
 
     parts: list[list[tuple[TypeFact, MemberFact, list[tuple[int, str]], str | None]]] = []
-    current: list = []
+    current: list[tuple[TypeFact, MemberFact, list[tuple[int, str]], str | None]] = []
     current_cost = 0
     for t, mf in all_members:
         m = mf.member
@@ -252,17 +266,30 @@ def _split_file(path: str, facts: ProjectFacts, settings: Settings, overhead: in
         note = note_for(i, len(parts))
         llm_members = [(t, mf) for t, mf, _, _ in part if mf.needs_llm]
         prompt, tkeys, mkeys, mreq = part_prompt(code, llm_members, note, [0], context)
-        for req, (_, _, _, label) in zip(mreq, [p for p in part if p[1].needs_llm]):
-            req.segment = label
+        for req, (_, _, _, segment_label) in zip(mreq, [p for p in part if p[1].needs_llm], strict=True):
+            req.segment = segment_label
         text, est = _estimate(prompt, overhead, settings)
         if est > limit:
             raise PlanningError(f"split part {i} estimated at {est} tokens exceeds limit {limit}")
-        units.append(Unit(f"split:{path}:part{i}of{len(parts)}", "split", [path], tkeys, mkeys, prompt, text, est,
-                          split_parent=parent, segmented_members=segmented))
+        units.append(
+            Unit(
+                f"split:{path}:part{i}of{len(parts)}",
+                "split",
+                [path],
+                tkeys,
+                mkeys,
+                prompt,
+                text,
+                est,
+                split_parent=parent,
+                segmented_members=segmented,
+            )
+        )
     return units
 
 
 # ------------------------------------------------------------ planning
+
 
 def plan_units(facts: ProjectFacts, settings: Settings, paths: list[str]) -> Plan:
     overhead = fixed_overhead(settings)
@@ -303,14 +330,15 @@ def plan_units(facts: ProjectFacts, settings: Settings, paths: list[str]) -> Pla
     return Plan(units, failed, context_dropped)
 
 
-def _pack_group(domain: str, package: str, paths: list[str], facts: ProjectFacts, settings: Settings,
-                overhead: int) -> list[Unit]:
+def _pack_group(
+    domain: str, package: str, paths: list[str], facts: ProjectFacts, settings: Settings, overhead: int
+) -> list[Unit]:
     limit = settings.budget.input_limit
     max_classes = settings.packing.max_classes
     packs: list[list[str]] = []
     current: list[str] = []
     for path in paths:
-        candidate = current + [path]
+        candidate = [*current, path]
         counter = [0]
         blocks = [_file_block(p, facts, counter)[0] for p in candidate]
         _, est = _estimate(ClassPrompt(blocks), overhead, settings)

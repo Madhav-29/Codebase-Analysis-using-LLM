@@ -24,8 +24,13 @@ _DELEGATE = re.compile(r"^\{\s*(?:return\s+)?((?:this\.)?\w+(?:\.\w+)*)\.(\w+)\(
 _DERIVED_QUERY = re.compile(r"^(find|read|get|query|search|stream|count|exists|delete|remove)\w*By[A-Z]\w*$")
 
 SPRING_DATA_BASES = {
-    "Repository", "CrudRepository", "ListCrudRepository", "PagingAndSortingRepository",
-    "ListPagingAndSortingRepository", "JpaRepository", "QuerydslPredicateExecutor",
+    "Repository",
+    "CrudRepository",
+    "ListCrudRepository",
+    "PagingAndSortingRepository",
+    "ListPagingAndSortingRepository",
+    "JpaRepository",
+    "QuerydslPredicateExecutor",
     "JpaSpecificationExecutor",
 }
 LOMBOK_NOTES = {
@@ -80,17 +85,21 @@ def describe_trivial(member: Member, owner: TypeDecl) -> DeterministicDescriptio
             target = "superclass" if c.group(1) == "super" else "another"
             return DeterministicDescription(f"Delegates to {target} constructor: `{c.group(1)}({c.group(2)})`.", True)
         statements = [s for s in body.strip("{} ").split(";") if s.strip()]
-        assigns = [_ASSIGN.fullmatch(s.strip() + ";") for s in statements]
-        if statements and all(a and a.group(2) in _param_names(member) for a in assigns):
+        assigns = [a for s in statements if (a := _ASSIGN.fullmatch(s.strip() + ";"))]
+        if statements and len(assigns) == len(statements) and all(a.group(2) in _param_names(member) for a in assigns):
             fields = ", ".join(a.group(1) for a in assigns)
             return DeterministicDescription(f"Initializes fields ({fields}) from constructor parameters.", True)
         return None
 
     if n_params == 0 and re.match(r"(get|is)[A-Z]", member.name) and (g := _GETTER.match(body)):
         return DeterministicDescription(f"Returns the `{g.group(1)}` field.", True)
-    if n_params == 1 and re.match(r"set[A-Z]", member.name) and (s := _SETTER.match(body)):
-        if s.group(2) == member.parameters[0].name:
-            return DeterministicDescription(f"Sets the `{s.group(1)}` field.", True)
+    if (
+        n_params == 1
+        and re.match(r"set[A-Z]", member.name)
+        and (s := _SETTER.match(body))
+        and s.group(2) == member.parameters[0].name
+    ):
+        return DeterministicDescription(f"Sets the `{s.group(1)}` field.", True)
     if d := _DELEGATE.match(body):
         # Only delegation to an injected collaborator (a final field) passing the
         # method's own parameters through counts; `name.toUpperCase()` does not.
@@ -98,11 +107,15 @@ def describe_trivial(member: Member, owner: TypeDecl) -> DeterministicDescriptio
         collaborators = {f.name for f in owner.fields if "final" in f.modifiers and "static" not in f.modifiers}
         args = [a.strip() for a in d.group(3).split(",") if a.strip()]
         if receiver in collaborators and all(a in _param_names(member) for a in args):
-            return DeterministicDescription(f"Delegates to `{d.group(1)}.{d.group(2)}(...)` with its own arguments.", True)
+            return DeterministicDescription(
+                f"Delegates to `{d.group(1)}.{d.group(2)}(...)` with its own arguments.", True
+            )
     return None
 
 
-def describe_abstract(member: Member, owner: TypeDecl, implementations: dict[str, list[TypeDecl]]) -> DeterministicDescription | None:
+def describe_abstract(
+    member: Member, owner: TypeDecl, implementations: dict[str, list[TypeDecl]]
+) -> DeterministicDescription | None:
     """Templated description for abstract members whose behaviour is defined elsewhere."""
     if member.body is not None:
         return None
@@ -119,8 +132,10 @@ def describe_abstract(member: Member, owner: TypeDecl, implementations: dict[str
             "Spring Data derived query method; the query is generated from the method name.", False
         )
     for impl in implementations.get(owner.name, []):
-        if any(m.name == member.name and len(m.parameters) == len(member.parameters) and m.body is not None
-               for m in impl.members):
+        if any(
+            m.name == member.name and len(m.parameters) == len(member.parameters) and m.body is not None
+            for m in impl.members
+        ):
             return DeterministicDescription(
                 f"Abstract declaration; implemented by {impl.name}.{member.name} (see that entry).", False
             )
@@ -135,22 +150,30 @@ def framework_notes(decl: TypeDecl, jf: JavaFile) -> list[str]:
     notes = [LOMBOK_NOTES[a.name] for a in decl.annotations if a.name in LOMBOK_NOTES]
     names = {a.name for a in decl.annotations}
     if "Mapper" in names:
-        notes.append("MapStruct @Mapper: an implementation class is generated at build time; abstract methods are generated mappings.")
+        notes.append(
+            "MapStruct @Mapper: an implementation class is generated at build time; abstract methods are generated mappings."
+        )
     if "Entity" in names:
         table = next((a for a in decl.annotations if a.name == "Table"), None)
         table_name = table.arguments.get("name") if table else None
         notes.append(f"JPA entity{f' mapped to table {table_name}' if table_name else ''}.")
     inherited = [t for t in decl.extends + decl.implements if _strip_generics(t) in SPRING_DATA_BASES]
     if inherited:
-        notes.append(f"Spring Data repository: inherits query/CRUD methods from {', '.join(inherited)}; inherited methods are not listed.")
+        notes.append(
+            f"Spring Data repository: inherits query/CRUD methods from {', '.join(inherited)}; inherited methods are not listed."
+        )
     for t in decl.extends:
         base = _strip_generics(t)
         if base == "RepresentationModelAssemblerSupport":
-            notes.append("Spring HATEOAS assembler: inherits toModel/toCollectionModel support from RepresentationModelAssemblerSupport.")
+            notes.append(
+                "Spring HATEOAS assembler: inherits toModel/toCollectionModel support from RepresentationModelAssemblerSupport."
+            )
         elif base == "RepresentationModel":
             notes.append("Spring HATEOAS representation model: carries hypermedia links.")
     if any(i.startswith("com.querydsl") for i in jf.imports) and decl in jf.types:
-        notes.append("Builds type-safe queries with Querydsl; Q-classes are generated at build time and are not in the repository.")
+        notes.append(
+            "Builds type-safe queries with Querydsl; Q-classes are generated at build time and are not in the repository."
+        )
     if any(i.startswith("com.blazebit") for i in jf.imports) and decl in jf.types:
         notes.append("Uses Blaze-Persistence query extensions on top of Querydsl/JPA.")
     return notes
