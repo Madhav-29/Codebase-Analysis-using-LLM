@@ -29,7 +29,7 @@ Settings come from (highest first) CLI flags, environment variables, `.env`, the
 
 **Details:**
 - **Data residency:** a Data Zone Standard (US) deployment processes requests within the US data zone. The analyzed code is sent there. `store=False` asks the service not to retain responses. Use an EU data-zone deployment if EU residency is required.
-- **Model version:** the deployment's version-upgrade policy (pinned or auto-upgrade) is configured in Azure AI Foundry. Each run records the version actually served in `metadata.served_models` (here `gpt-5.4-mini-2026-03-17`, GA until 2027-09-20), so a version change is visible in the output.
+- **Model version:** the deployment uses auto-upgrade (Azure's default, "Once a new default version is available"), so Azure may change the model version between runs. Each run records the version actually served in `metadata.served_models` (`gpt-5.4-mini-2026-03-17` for the committed output, GA until 2027-09-20) for traceability.
 - **What is sent:** `reasoning_effort` and `max_completion_tokens`, no temperature, and strict JSON-schema output.
 
 ### Gemini API (alternative): Gemini 3.5 Flash-Lite

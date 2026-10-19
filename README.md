@@ -115,7 +115,8 @@ Sections: `metadata`, `project_overview`, `key_methods`, `endpoints`, `domains`,
   - 277 of the 320 LLM findings weren't individually reviewed.
 - **Generated code is noted, not analyzed** (Lombok, MapStruct, Querydsl). Database views and procedures aren't in the repository.
 - **The rule-based README check covers only endpoint and CRUD claims.**
-- **Code leaves the machine.** It is sent to the LLM provider; this deployment processes it in the US data zone. Whether the model version can change depends on the deployment's upgrade policy, but every run records the served version.
+- **Code leaves the machine.** It is sent to the LLM provider; this deployment processes it in the US data zone.
+- **The model version can change.** The deployment auto-upgrades, so Azure may move it to a newer version. Every run records the version actually served (`gpt-5.4-mini-2026-03-17` for the committed output) in its metadata for traceability.
 - **Evaluated on one codebase.** Costs are reported as token counts; prices aren't estimated.
 
 ## Future work
