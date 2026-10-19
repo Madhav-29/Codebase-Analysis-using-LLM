@@ -206,7 +206,7 @@ def validate(path: Path, repo: Annotated[Path | None, typer.Option("--repo", hel
 
 
 @app.command()
-def schema(output: Annotated[Path, typer.Option("--output")] = Path("output/analysis.schema.json")) -> None:
+def schema(output: Annotated[Path, typer.Option("--output")] = Path("schemas/analysis.schema.json")) -> None:
     """Write the JSON Schema of the analysis output."""
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(AnalysisOutput.model_json_schema(), indent=2) + "\n", encoding="utf-8")

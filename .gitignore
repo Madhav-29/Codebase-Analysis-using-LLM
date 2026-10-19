@@ -3,17 +3,22 @@
 .env.*
 !.env.example
 
-# analysis target and caches
-target_repo/
+# response cache (content-addressed; rebuilt by running the analyzer)
 .cache/
+
+# local smoke runs (the deliverable is output/analysis.json)
+output/smoke/
+output/smoke*.json
 
 # python
 __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
 *.egg-info/
 dist/
-
-# local smoke runs (the deliverable is output/analysis.json)
-output/smoke*.json
