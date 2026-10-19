@@ -114,7 +114,9 @@ def render_class_prompt(p: ClassPrompt) -> str:
         if b.deterministic_note:
             out.append(b.deterministic_note)
         out.append("")
-    out.append("Return one entry per requested type key, and inside it one method entry per requested member key of that type.")
+    out.append(
+        "Return one entry per requested type key, and inside it one method entry per requested member key of that type."
+    )
     return "\n".join(out)
 
 
@@ -122,15 +124,25 @@ def render_domain_prompt(domain: str, class_summaries: str, endpoints: str, part
     parts = [f"# Domain: {domain}"]
     if partial_note:
         parts.append(partial_note)
-    parts += ["## Classes (summaries written from the source)", class_summaries or "(none)",
-              "## REST endpoints (parser-extracted)", endpoints or "(none)"]
+    parts += [
+        "## Classes (summaries written from the source)",
+        class_summaries or "(none)",
+        "## REST endpoints (parser-extracted)",
+        endpoints or "(none)",
+    ]
     return "\n".join(parts)
 
 
 def render_project_prompt(domain_summaries: str, facts: str, build_context: str, readme: str) -> str:
-    return "\n".join([
-        "## Domain summaries", domain_summaries,
-        "## Extracted facts", facts,
-        "## Build and configuration files", build_context,
-        "## README (author claims; verify against facts)", readme,
-    ])
+    return "\n".join(
+        [
+            "## Domain summaries",
+            domain_summaries,
+            "## Extracted facts",
+            facts,
+            "## Build and configuration files",
+            build_context,
+            "## README (author claims; verify against facts)",
+            readme,
+        ]
+    )

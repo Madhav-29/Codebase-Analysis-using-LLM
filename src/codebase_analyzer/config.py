@@ -1,8 +1,8 @@
-"""Runtime settings.
+"""Runtime settings, validated once at startup.
 
-All values can be overridden through environment variables (or `.env`) and most
-through CLI flags. API keys are read by the provider SDKs from the environment;
-they are never stored in settings or written to output.
+Values come from (highest first) CLI flags, environment variables, `.env`, then
+the defaults below. API keys are deliberately not settings: provider modules
+read them from the environment, so they never reach logs, metadata or output.
 """
 
 from __future__ import annotations
@@ -56,10 +56,13 @@ class PackingConfig(BaseModel):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    llm_provider: Literal["google_genai", "anthropic"] = "google_genai"
-    llm_model: str = "gemini-3.5-flash-lite"
-    llm_temperature: float = 0.0
-    llm_concurrency: int = 1  # free-tier friendly; raise on a paid tier
+    llm_provider: Literal["google_genai", "azure_foundry", "anthropic"] = "azure_foundry"
+    llm_model: str = "gpt-5.4-mini"  # model id, or the deployment name on Azure
+    llm_temperature: float = 0.0  # sent only to models that accept sampling parameters
+    # sent only to reasoning models (azure_foundry)
+    llm_reasoning_effort: Literal["none", "minimal", "low", "medium", "high"] = "low"
+    azure_ai_endpoint: str | None = None  # https://<resource>.services.ai.azure.com/openai/v1
+    llm_concurrency: int | None = None  # None: the provider's default (see llm/providers)
     llm_max_attempts: int = 3  # per request, for unparseable or locally invalid output
     llm_backoff_initial_s: float = 10.0  # rate-limit/server-error backoff, doubled each retry
     llm_backoff_max_s: float = 120.0
@@ -72,7 +75,5 @@ class Settings(BaseSettings):
     cache_dir: Path = Path(".cache/llm")
     use_cache: bool = True
 
-    complexity_thresholds: dict[str, int] = Field(
-        default_factory=lambda: {"moderate": 6, "high": 11, "very_high": 21}
-    )
+    complexity_thresholds: dict[str, int] = Field(default_factory=lambda: {"moderate": 6, "high": 11, "very_high": 21})
     top_complex_methods: int = 10

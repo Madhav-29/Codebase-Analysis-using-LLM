@@ -1,0 +1,397 @@
+# Manual review of LLM findings (spring-rest-sakila @ 62873f7). Scored by `codebase-analyzer eval`.
+review_scope: LLM findings with category potential_bug and severity medium or high
+categories:
+  valid_bug: The code fails or misbehaves as described.
+  valid_improvement: Accurate and worth changing, but not a defect.
+  style_opinion: Accurate, but a matter of convention or defensive style.
+  false_positive: The claim about the code is wrong.
+models:
+  gemini-3.5-flash-lite:
+    findings:
+    - scope: com.example.app.common.constant.Country
+      title: Potential NullPointerException on missing country ID lookup
+      severity: medium
+      category: valid_bug
+      note: An id with no Country entry makes country.getCountry() throw.
+    - scope: com.example.app.common.security.JwtAuthenticationProvider
+      title: Unchecked Cast for Authorities List
+      severity: high
+      category: valid_improvement
+      note: A malformed claim would throw ClassCastException; tokens are server-signed. Severity overstated.
+    - scope: com.example.app.services.auth.domain.converter.UserRoleConverter
+      title: Mismatched mapping between authority and enum constant name
+      severity: medium
+      category: false_positive
+      note: getAuthority() returns the enum constant's name, so valueOf round-trips.
+    - scope: com.example.app.services.auth.domain.entity.AuthorityEntity
+      title: Password omitted from equals and hashCode
+      severity: medium
+      category: style_opinion
+      note: Excluding the password from equals is the usual choice; the finding says so itself.
+    - scope: com.example.app.services.auth.service.JpaUserDetailsService
+      title: Missing null check on repository result
+      severity: high
+      category: valid_bug
+      note: A missing user is dereferenced (NPE) instead of raising UsernameNotFoundException.
+    - scope: com.example.app.services.catalog.assembler.FilmDetailsRepresentationModelAssembler
+      title: Incorrect superclass constructor arguments
+      severity: high
+      category: valid_bug
+      note: Passes FilmDetails.class where the controller class belongs; sibling assemblers pass a controller.
+    - scope: com.example.app.services.catalog.domain.dto.CategoryDto.Category
+      title: Primitive equality used on enum type
+      severity: medium
+      category: false_positive
+      note: == on an enum is correct Java.
+    - scope: com.example.app.services.catalog.domain.entity.ActorEntity
+      title: Missing Null Check in update Method
+      severity: medium
+      category: style_opinion
+      note: Null-guarding an internal update(entity) call is defensive style, not a bug.
+    - scope: com.example.app.services.catalog.domain.entity.FilmActorEntity
+      title: GeneratedValue on non-incrementing composite ID columns
+      severity: high
+      category: valid_improvement
+      note: '@GeneratedValue on @IdClass key fields mapped read-only is a mapping smell. Severity overstated.'
+    - scope: com.example.app.services.catalog.domain.entity.FilmActorEntityPK
+      title: GeneratedValue annotation on composite primary key fields
+      severity: medium
+      category: valid_improvement
+      note: '@GeneratedValue on composite-key fields is a mapping smell.'
+    - scope: com.example.app.services.catalog.domain.entity.FilmCategoryEntityPK
+      title: GeneratedValue annotation on composite primary key fields
+      severity: medium
+      category: valid_improvement
+      note: '@GeneratedValue on composite-key fields is a mapping smell.'
+    - scope: com.example.app.services.catalog.domain.entity.FilmCategoryEntity
+      title: GeneratedValue on non-primary-key-generated or read-only ID fields
+      severity: high
+      category: valid_improvement
+      note: Same mapping smell as FilmActorEntity. Severity overstated.
+    - scope: com.example.app.services.catalog.domain.entity.FilmTextEntity
+      title: GeneratedValue on non-identity or assigned Primary Key
+      severity: medium
+      category: false_positive
+      note: Speculative claim about Sakila's schema, not supported by the code.
+    - scope: com.example.app.services.catalog.repository.custom.CustomActorRepositoryImpl
+      title: Unchecked Optional wrapping of query results
+      severity: medium
+      category: valid_bug
+      note: Optional.of(fetchFirst()) throws NPE when nothing matches.
+    - scope: com.example.app.services.catalog.repository.custom.CustomActorRepositoryImpl
+      title: Unchecked Optional wrapping of query results
+      severity: medium
+      category: valid_bug
+      note: Optional.of(fetchFirst()) throws NPE when nothing matches.
+    - scope: com.example.app.services.catalog.repository.custom.CustomActorRepositoryImpl
+      title: Unchecked Optional wrapping of query results
+      severity: medium
+      category: valid_bug
+      note: Optional.of(fetchFirst()) throws NPE when nothing matches.
+    - scope: com.example.app.services.catalog.repository.custom.CustomFilmRepositoryImpl
+      title: Optional.of used with potential null fetch result
+      severity: medium
+      category: valid_bug
+      note: Optional.of(fetchFirst()) throws NPE when nothing matches.
+    - scope: com.example.app.services.catalog.repository.custom.CustomFilmRepositoryImpl
+      title: Optional.of used with potential null fetch result in details
+      severity: medium
+      category: valid_bug
+      note: Optional.of(fetchFirst()) throws NPE when nothing matches.
+    - scope: com.example.app.services.catalog.service.FilmServiceImpl
+      title: Potentially unsafe method call on empty Optional in getFilmRentalPrice
+      severity: medium
+      category: valid_bug
+      note: Only getRentalRate() is null-checked; a null model throws first.
+    - scope: com.example.app.services.customer.assembler.CustomerRepresentationModelAssembler
+      title: Incorrect superclass constructor argument passed in assembler
+      severity: medium
+      category: false_positive
+      note: Passing CustomerController.class to the assembler super constructor is what the API expects.
+    - scope: com.example.app.services.customer.controller.CustomerController
+      title: Unvalidated enum parsing on rental status parameter
+      severity: medium
+      category: valid_bug
+      note: RentalStatus.valueOf on raw input turns a bad value into a 500.
+    - scope: com.example.app.services.customer.domain.entity.CustomerEntity
+      title: Updating read-only foreign key scalar fields
+      severity: medium
+      category: valid_bug
+      note: 'update() assigns FK columns mapped insertable/updatable=false: silently not persisted.'
+    - scope: com.example.app.services.customer.repository.custom.CustomCustomerRepositoryImpl
+      title: Unsafe fetchFirst usage in Optional return
+      severity: high
+      category: valid_bug
+      note: Optional.of(fetchFirst()) throws NPE when nothing matches.
+    - scope: com.example.app.services.customer.repository.custom.CustomCustomerRepositoryImpl
+      title: RentalStatus filter logic inversion
+      severity: medium
+      category: valid_bug
+      note: RENTED filters returnDate IS NOT NULL, i.e. returned rentals.
+    - scope: com.example.app.services.location.domain.dto.CountryDto.Country
+      title: Primitive equality used on enum type
+      severity: medium
+      category: false_positive
+      note: == on an enum is correct Java.
+    - scope: com.example.app.services.location.domain.dto.CountryDto.Country
+      title: Reference equality used on String field
+      severity: high
+      category: valid_bug
+      note: CountryDto.equals compares the String field country with ==.
+    - scope: com.example.app.services.location.domain.dto.LanguageDto.Language
+      title: Enum compared with equality operator
+      severity: medium
+      category: false_positive
+      note: == on an enum is correct Java.
+    - scope: com.example.app.services.location.domain.entity.AddressEntity
+      title: Updating cityId directly while cityByCityId association is unassigned
+      severity: medium
+      category: valid_bug
+      note: cityId is mapped read-only; the update is silently not persisted.
+    - scope: com.example.app.services.location.domain.entity.CityEntity
+      title: Redundant and unsynchronized dual country mappings
+      severity: medium
+      category: valid_bug
+      note: update() changes the read-only countryId; not persisted.
+    - scope: com.example.app.services.location.domain.entity.CountryEntity
+      title: Primitive comparison on boxed enum type in equals
+      severity: medium
+      category: false_positive
+      note: == on an enum is correct Java.
+    - scope: com.example.app.services.location.domain.entity.LanguageEntity
+      title: Primitive comparison on boxed Enum type
+      severity: medium
+      category: false_positive
+      note: == on an enum is correct Java.
+    - scope: com.example.app.services.location.repository.custom.CustomAddressRepositoryImpl
+      title: Unimplemented repository methods return null and empty values
+      severity: medium
+      category: valid_bug
+      note: Stub methods return null / Optional.empty().
+    - scope: com.example.app.services.payment.domain.entity.PaymentEntity
+      title: Updating read-only foreign key scalar fields has no database effect
+      severity: medium
+      category: valid_bug
+      note: 'update() assigns read-only FK columns: not persisted.'
+    - scope: com.example.app.services.payment.repository.custom.CustomPaymentRepositoryImpl
+      title: Unimplemented Repository Methods Return Null or Empty
+      severity: medium
+      category: valid_bug
+      note: Stub methods return null / Optional.empty().
+    - scope: com.example.app.services.rental.domain.entity.RentalEntity
+      title: Updating read-only foreign key scalar properties
+      severity: medium
+      category: valid_bug
+      note: 'update() assigns read-only FK columns: not persisted.'
+    - scope: com.example.app.services.rental.service.RentalServiceImpl
+      title: Unimplemented overdue rental methods
+      severity: medium
+      category: valid_bug
+      note: Overdue-rental methods return null.
+    - scope: com.example.app.services.staff.repository.custom.CustomStaffRepositoryImpl
+      title: Optional of fetchFirst can throw NullPointerException
+      severity: medium
+      category: valid_bug
+      note: Optional.of(fetchFirst()) throws NPE when nothing matches.
+    - scope: com.example.app.services.store.domain.dto.CategorySalesDto.CategorySales
+      title: Primitive comparison used on object field
+      severity: medium
+      category: false_positive
+      note: == on an enum is correct Java.
+    - scope: com.example.app.services.store.domain.entity.InventoryEntity
+      title: Updating read-only foreign key scalar fields
+      severity: medium
+      category: valid_bug
+      note: 'update() assigns read-only FK columns: not persisted.'
+    - scope: com.example.app.services.store.domain.entity.StoreEntity
+      title: Unsynchronized FK fields and association objects
+      severity: medium
+      category: valid_bug
+      note: 'update() assigns read-only FK columns: not persisted.'
+    - scope: com.example.app.services.store.repository.custom.CustomStoreRepositoryImpl
+      title: Potential NullPointerException on fetchFirst()
+      severity: medium
+      category: valid_bug
+      note: A null fetchFirst() result is passed to replaceCountryIdToCountry.
+    - scope: com.example.app.services.store.repository.custom.CustomStoreRepositoryImpl
+      title: Potential NullPointerException on fetchFirst() for staff
+      severity: medium
+      category: valid_bug
+      note: Optional.of(fetchFirst()) throws NPE when nothing matches.
+    - scope: domain:staff
+      title: Potential NullPointerException in Optional fetchFirst
+      severity: medium
+      category: valid_bug
+      note: Same Optional.of(fetchFirst()) defect, repeated at domain level.
+  gpt-5.4-mini:
+    findings:
+    - scope: com.example.app.common.constant.Country
+      title: Null lookup can throw on unknown ids
+      severity: high
+      category: valid_bug
+      note: An id with no Country entry makes country.getCountry() throw.
+    - scope: com.example.app.common.filter.MdcLoggingFilter
+      title: Unconditional request cast
+      severity: medium
+      category: style_opinion
+      note: Spring registers the filter for HTTP requests only, so the cast cannot fail in this app.
+    - scope: com.example.app.services.auth.domain.converter.UserRoleConverter
+      title: Empty database string will fail to parse
+      severity: medium
+      category: valid_bug
+      note: 'An empty role set is written as "" and cannot be read back: valueOf("") throws.'
+    - scope: com.example.app.services.auth.domain.dto.AuthorityDto.Authority
+      title: Null identifiers compare equal
+      severity: medium
+      category: style_opinion
+      note: Equality by id with null ids equal is a normal DTO convention.
+    - scope: com.example.app.services.auth.domain.dto.AuthorityDto.User
+      title: Null emails compare equal
+      severity: medium
+      category: style_opinion
+      note: Equality by email with null emails equal is a normal DTO convention.
+    - scope: com.example.app.services.catalog.domain.converter.CategoryConverter
+      title: Unknown category ids map to null
+      severity: medium
+      category: valid_improvement
+      note: Unknown ids map to null silently; failing fast would surface bad data.
+    - scope: com.example.app.services.catalog.domain.converter.FilmRatingConverter
+      title: Unknown rating values map to null
+      severity: medium
+      category: valid_improvement
+      note: Unknown ratings map to null silently; failing fast would surface bad data.
+    - scope: com.example.app.services.catalog.domain.converter.SpecialFeatureConverter
+      title: Unknown feature tokens become null elements
+      severity: medium
+      category: valid_improvement
+      note: 'Real gap; the mechanism is off: EnumSet rejects null, so an unknown token throws at once.'
+    - scope: com.example.app.services.catalog.domain.entity.FilmCategoryEntity
+      title: Equality depends on mutable timestamp
+      severity: high
+      category: valid_improvement
+      note: Mutable lastUpdate in entity equals/hashCode is an anti-pattern. Severity overstated.
+    - scope: com.example.app.services.catalog.domain.entity.FilmCategoryEntity
+      title: Update method omits key and associations
+      severity: medium
+      category: valid_bug
+      note: 'update() assigns categoryId, an @Id column mapped read-only: not persisted.'
+    - scope: com.example.app.services.catalog.repository.custom.CustomActorRepositoryImpl
+      title: Optional.of can throw on missing row
+      severity: high
+      category: valid_bug
+      note: Optional.of(fetchFirst()) throws NPE when nothing matches (3 sites in one finding).
+    - scope: com.example.app.services.catalog.service.FilmServiceImpl
+      title: Rental-rate lookup may NPE on null result
+      severity: medium
+      category: valid_bug
+      note: Only getRentalRate() is null-checked; a null model throws first.
+    - scope: com.example.app.services.customer.controller.CustomerController
+      title: Invalid rental status can throw at runtime
+      severity: medium
+      category: valid_bug
+      note: RentalStatus.valueOf on raw input turns a bad value into a 500.
+    - scope: com.example.app.services.customer.domain.entity.CustomerEntity
+      title: Update has no null guard
+      severity: medium
+      category: style_opinion
+      note: Null-guarding an internal update(entity) call is defensive style.
+    - scope: com.example.app.services.customer.repository.custom.CustomCustomerRepositoryImpl
+      title: Optional wraps a possible null
+      severity: high
+      category: valid_bug
+      note: Optional.of(fetchFirst()) throws NPE when nothing matches.
+    - scope: com.example.app.services.customer.repository.custom.CustomCustomerRepositoryImpl
+      title: End date is truncated to start of day
+      severity: medium
+      category: valid_bug
+      note: endDate.atStartOfDay() as an inclusive upper bound excludes the whole end date.
+    - scope: com.example.app.services.location.domain.converter.CountryConverter
+      title: Unknown country ID may deserialize to null
+      severity: medium
+      category: valid_improvement
+      note: Unknown ids map to null silently; failing fast would surface bad data.
+    - scope: com.example.app.services.location.domain.converter.GeometryConverter
+      title: Non-Point geometries collapse to null
+      severity: medium
+      category: valid_improvement
+      note: Non-Point geometries silently become null.
+    - scope: com.example.app.services.location.domain.converter.LanguageConverter
+      title: Unknown language ID may deserialize to null
+      severity: medium
+      category: valid_improvement
+      note: Unknown ids map to null silently; failing fast would surface bad data.
+    - scope: com.example.app.services.location.domain.dto.CountryDto.Country
+      title: String field compared by reference
+      severity: high
+      category: valid_bug
+      note: CountryDto.equals compares the String field country with ==.
+    - scope: com.example.app.services.location.domain.entity.AddressEntity
+      title: Update method leaves city relation stale
+      severity: medium
+      category: valid_bug
+      note: cityId is mapped read-only; the update is silently not persisted.
+    - scope: com.example.app.services.location.repository.custom.CustomAddressRepositoryImpl
+      title: List method returns null
+      severity: high
+      category: valid_bug
+      note: Stub returns null.
+    - scope: com.example.app.services.location.repository.custom.CustomAddressRepositoryImpl
+      title: ID lookup always misses
+      severity: high
+      category: valid_bug
+      note: Stub always returns Optional.empty().
+    - scope: com.example.app.services.payment.repository.custom.CustomPaymentRepositoryImpl
+      title: Unimplemented repository methods return no data
+      severity: high
+      category: valid_bug
+      note: Stub methods return null / Optional.empty().
+    - scope: com.example.app.services.payment.service.PaymentServiceImpl
+      title: Create uses request rental id, not rental argument
+      severity: medium
+      category: valid_improvement
+      note: rentalId comes from the request while the rental object is wired separately; they can disagree.
+    - scope: com.example.app.services.rental.assembler.RentalRepresentationModelAssembler
+      title: Self link depends on non-null rental id
+      severity: medium
+      category: style_opinion
+      note: Entities read from the database always have ids; defensive only.
+    - scope: com.example.app.services.rental.domain.entity.RentalEntity
+      title: Equality includes mutable timestamp fields
+      severity: medium
+      category: valid_improvement
+      note: Mutable lastUpdate in entity equals/hashCode is an anti-pattern.
+    - scope: com.example.app.services.rental.repository.custom.CustomRentalRepositoryImpl
+      title: Multiple matches resolved arbitrarily
+      severity: medium
+      category: style_opinion
+      note: A customer cannot have two active rentals of one inventory item; ordering is moot.
+    - scope: com.example.app.services.store.domain.dto.InventoryDto.Inventory
+      title: Mutable fields used in hash code
+      severity: medium
+      category: style_opinion
+      note: Mutable fields in a DTO's equals/hashCode are a normal value-object convention.
+    - scope: com.example.app.services.store.domain.entity.InventoryEntity
+      title: Update method skips association references
+      severity: medium
+      category: valid_bug
+      note: 'update() assigns read-only FK columns: not persisted.'
+    - scope: com.example.app.services.store.repository.custom.CustomStoreRepositoryImpl
+      title: Optional.of may throw on missing result
+      severity: high
+      category: valid_bug
+      note: Optional.of(fetchFirst()) throws NPE when nothing matches.
+    - scope: com.example.app.services.store.repository.custom.CustomStoreRepositoryImpl
+      title: Null result passed to DTO mutation
+      severity: high
+      category: valid_bug
+      note: A null fetchFirst() result is passed to replaceCountryIdToCountry.
+    - scope: com.example.app.services.store.repository.custom.CustomStoreRepositoryImpl
+      title: Staff lookup wraps nullable result with Optional.of
+      severity: high
+      category: valid_bug
+      note: Optional.of(fetchFirst()) throws NPE when nothing matches.
+    - scope: com.example.app.services.store.service.StoreServiceImpl
+      title: Unimplemented staff association methods
+      severity: high
+      category: valid_bug
+      note: addStoreStaff / updateStoreStaff return null.
