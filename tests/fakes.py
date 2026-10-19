@@ -2,7 +2,7 @@
 
 `with_structured_output(schema, method=..., include_raw=True)` returns a
 Runnable whose output is {"raw": AIMessage, "parsed": schema | None,
-"parsing_error": Exception | None}, exactly what langchain-anthropic returns.
+"parsing_error": Exception | None}, the same contract as ChatGoogleGenerativeAI.
 """
 
 from __future__ import annotations

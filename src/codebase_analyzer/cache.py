@@ -1,7 +1,7 @@
 """On-disk cache of validated LLM responses.
 
 Key = sha256 over everything that can change the answer: prompt version,
-provider, model, sampling/effort settings, output schema, system prompt and the
+provider, model, temperature, output schema, system prompt and the
 full user prompt (which already contains the unit's code and supporting
 context). Changing any of them is a cache miss; re-running an unchanged
 analysis replays identical output, which is also how runs are reproducible.
@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from .prompts import PROMPT_VERSION
 
 
-def cache_key(*, provider: str, model: str, temperature: float | None, effort: str | None,
+def cache_key(*, provider: str, model: str, temperature: float,
               schema: type[BaseModel], system: str, user: str) -> str:
     payload = json.dumps(
         {
@@ -26,7 +26,6 @@ def cache_key(*, provider: str, model: str, temperature: float | None, effort: s
             "provider": provider,
             "model": model,
             "temperature": temperature,
-            "effort": effort,
             "schema": schema.model_json_schema(),
             "system": system,
             "user": user,

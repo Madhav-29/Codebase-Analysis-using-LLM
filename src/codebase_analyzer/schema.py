@@ -92,7 +92,6 @@ class Usage(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     cache_hits: int = 0
-    est_cost_usd: float | None = None
 
 
 class Metadata(BaseModel):
@@ -101,13 +100,11 @@ class Metadata(BaseModel):
     analyzed_at: str
     schema_version: str = SCHEMA_VERSION
     prompt_version: str
-    llm_provider: str
-    llm_model: str
-    temperature: float | None
-    temperature_note: str | None
-    effort: str | None
-    token_budget_config: dict
-    packing_config: dict
+    provider: str
+    model: str
+    temperature: float
+    token_budget: dict
+    packing: dict
     context_path: str
     usage: Usage
     max_classes: int | None
@@ -210,11 +207,13 @@ class ComplexitySummary(BaseModel):
     methods_total: int
     methods_with_metrics: int
     avg_cyclomatic: float
+    avg_nloc: float
     max_cyclomatic: int
+    max_nloc: int
     band_counts: dict[str, int]
     top_complex_methods: list[ComplexMethodRef]
     top_complex_trivial_methods: list[ComplexMethodRef]
-    thresholds_used: dict[str, int]
+    thresholds: dict[str, int]
     notes: list[str]
 
 
@@ -269,7 +268,7 @@ class Coverage(BaseModel):
     methods_described_by_source: dict[str, int]
     methods_undescribed: list[str]
     units_total: int
-    units_packed: list[PackRecord]
+    packs: list[PackRecord]
     units_split: list[SplitRecord]
     units_failed: list[FailedUnit]
     findings_dropped: list[str]

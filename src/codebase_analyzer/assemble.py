@@ -103,6 +103,7 @@ def _complexity_summary(facts: ProjectFacts, settings: Settings) -> ComplexitySu
     th = settings.complexity_thresholds
     measured = [(t, mf) for t in facts.types.values() for mf in t.members if mf.complexity]
     ccs = [mf.complexity.cyclomatic for _, mf in measured]
+    nlocs = [mf.complexity.nloc for _, mf in measured]
 
     def ref(t, mf) -> ComplexMethodRef:
         return ComplexMethodRef(id=mf.id, cyclomatic=mf.complexity.cyclomatic, nloc=mf.complexity.nloc,
@@ -117,15 +118,17 @@ def _complexity_summary(facts: ProjectFacts, settings: Settings) -> ComplexitySu
         methods_total=sum(len(t.members) for t in facts.types.values()),
         methods_with_metrics=len(measured),
         avg_cyclomatic=round(sum(ccs) / len(ccs), 2) if ccs else 0.0,
+        avg_nloc=round(sum(nlocs) / len(nlocs), 2) if nlocs else 0.0,
         max_cyclomatic=max(ccs, default=0),
+        max_nloc=max(nlocs, default=0),
         band_counts=dict(Counter(complexity_band(c, th) for c in ccs)),
         top_complex_methods=ranked(trivial=False),
         top_complex_trivial_methods=ranked(trivial=True),
-        thresholds_used=th,
+        thresholds=th,
         notes=[
             "Cyclomatic complexity, NLOC and token count are computed by lizard per member; parameter count comes from the parser.",
             "Abstract declarations have no body and no metrics.",
-            "Bands: low < moderate <= CC < high <= CC < very_high (thresholds_used).",
+            "Bands by cyclomatic complexity (CC): low if CC < moderate, moderate if CC < high, high if CC < very_high, else very_high (see thresholds).",
             "top_complex_trivial_methods lists boilerplate (mostly hand-written equals/hashCode) separately so it does not crowd out business logic.",
             "Methods of anonymous classes inside a member are not folded into that member's complexity.",
         ],
@@ -218,7 +221,7 @@ def build_output(*, facts: ProjectFacts, settings: Settings, selected: list[str]
         methods_described_by_source=dict(source_counts),
         methods_undescribed=undescribed,
         units_total=len(plan.units),
-        units_packed=[PackRecord(unit=u.id, classes=list(u.type_keys.values()), est_tokens=u.est_tokens)
+        packs=[PackRecord(unit=u.id, classes=list(u.type_keys.values()), est_tokens=u.est_tokens)
                       for u in plan.units if u.kind == "pack"],
         units_split=[SplitRecord(unit=parent, file=parts[0].files[0], parts=len(parts),
                                  reason=f"file exceeds input budget of {settings.budget.input_limit} tokens",

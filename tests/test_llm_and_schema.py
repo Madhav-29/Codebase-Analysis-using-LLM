@@ -6,7 +6,9 @@ from codebase_analyzer.cache import ResponseCache
 from codebase_analyzer.chunking import plan_units
 from codebase_analyzer.config import Settings
 from codebase_analyzer.facts import build_facts
-from codebase_analyzer.llm import LLMRequest, StructuredRunner
+from langchain_core.exceptions import ModelAuthenticationError, ModelRateLimitError
+
+from codebase_analyzer.llm import FatalLLMError, LLMRequest, QuotaExhausted, StructuredRunner, make_chat_model
 from codebase_analyzer.schema import ClassUnitResponse, DomainResponse
 
 from .fakes import FakeStructuredModel, class_payload
@@ -70,9 +72,19 @@ def test_runner_retries_validation_failures_with_feedback_then_succeeds():
     assert runner.usage.llm_calls == 2 and runner.usage.input_tokens == 200
 
 
+def _runner(model, settings=None, cache=None):
+    runner = StructuredRunner(model, settings or Settings(), cache)
+    runner.sleeps = []
+    runner.sleep = runner.sleeps.append  # record backoff waits instead of sleeping
+    return runner
+
+
 def test_runner_retries_transient_errors_and_reports_persistent_failure():
     flaky = FakeStructuredModel(lambda s, u, n: ConnectionError("boom") if n == 1 else DOMAIN_OK)
-    assert StructuredRunner(flaky, Settings(), None).run([_req()], "t")["r1"].parsed is not None
+    runner = _runner(flaky)
+    res = runner.run([_req()], "t")["r1"]
+    assert res.parsed is not None and res.attempts == 1  # a transient error is not a validation attempt
+    assert runner.sleeps == [Settings().llm_backoff_initial_s]
 
     always_bad = FakeStructuredModel(lambda s, u, n: {"summary": "missing fields"})
     settings = Settings()
@@ -104,3 +116,43 @@ def test_cache_replays_without_calling_the_model(tmp_path):
     third = FakeStructuredModel(lambda s, u, n: DOMAIN_OK)
     StructuredRunner(third, other_model, cache).run([_req()], "t")
     assert len(third.calls) == 1
+
+
+def test_rate_limit_backs_off_exponentially_and_honors_server_hint():
+    errors = [ModelRateLimitError("429 RESOURCE_EXHAUSTED"), ModelRateLimitError("429 RESOURCE_EXHAUSTED"),
+              ModelRateLimitError("429 RESOURCE_EXHAUSTED. Please retry in 7.5s.")]
+    fake = FakeStructuredModel(lambda s, u, n: errors[n - 1] if n <= 3 else DOMAIN_OK)
+    runner = _runner(fake, Settings(llm_backoff_initial_s=10, llm_backoff_max_s=15))
+    assert runner.run([_req()], "t")["r1"].parsed is not None
+    assert runner.sleeps == [10, 15, 7.5]  # doubled, capped at max, then the server's hint
+
+
+def test_daily_quota_stops_the_run_and_a_rerun_resumes_from_cache(tmp_path):
+    cache = ResponseCache(tmp_path)
+    daily = ModelRateLimitError("429 RESOURCE_EXHAUSTED quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+    reqs = [LLMRequest(f"r{i}", "sys", f"user {i}", DomainResponse) for i in (1, 2, 3)]
+    first = FakeStructuredModel(lambda s, u, n: DOMAIN_OK if n == 1 else daily)
+    with pytest.raises(QuotaExhausted):
+        _runner(first, cache=cache).run(reqs, "t")
+    assert len(first.calls) == 2  # r1 answered, r2 hit the daily quota, r3 never sent
+
+    second = FakeStructuredModel(lambda s, u, n: DOMAIN_OK)
+    runner = _runner(second, cache=cache)
+    results = runner.run(reqs, "t")
+    assert results["r1"].cached and not results["r2"].cached and len(second.calls) == 2
+    assert runner.usage.cache_hits == 1
+
+
+def test_auth_error_is_fatal_without_retries():
+    fake = FakeStructuredModel(lambda s, u, n: ModelAuthenticationError("401 API key not valid"))
+    with pytest.raises(FatalLLMError):
+        _runner(fake).run([_req()], "t")
+    assert len(fake.calls) == 1
+
+
+def test_gemini_chat_model_is_configured_from_settings(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "dummy-not-a-real-key")  # constructing the client makes no request
+    llm = make_chat_model(Settings(llm_provider="google_genai", llm_model="gemini-3.8-flash"))
+    assert type(llm).__name__ == "ChatGoogleGenerativeAI"
+    assert llm.model == "gemini-3.8-flash" and llm.temperature == 0.0
+    assert llm.max_output_tokens == Settings().budget.output_reserve and llm.max_retries == 1

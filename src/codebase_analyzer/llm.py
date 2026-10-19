@@ -1,55 +1,94 @@
-"""LangChain model factory and a batched, validated structured-output runner.
+"""LangChain model factory and a validated structured-output runner.
 
 LangChain's role here is deliberately narrow: a provider-neutral chat model
-(`ChatAnthropic` / `ChatOpenAI`), `with_structured_output` bound to our Pydantic
-schemas, and `.batch()` with a concurrency limit. Orchestration (map/reduce,
-budgets, caching) is plain Python so every step is visible and testable.
+(`ChatGoogleGenerativeAI`, optionally `ChatAnthropic`), `with_structured_output`
+bound to our Pydantic schemas, and LangChain's provider-neutral error classes
+(`ModelRateLimitError`, ...). Orchestration (map/reduce, budgets, caching,
+retries) is plain Python so every step is visible and testable.
 
-Retries:
-* transient API errors (429/5xx/connection) are retried with backoff by the
-  provider SDK (`max_retries`);
-* failures that survive that, unparseable output, and responses that fail our
-  local validation are re-sent up to `llm_max_attempts` times, with the
-  validation error appended so the model can correct itself;
-* after that the request is reported as failed. Nothing is fabricated.
+Per request:
+1. A valid cached response is replayed without calling the model.
+2. Rate limits (429 / RESOURCE_EXHAUSTED), server errors and timeouts are
+   retried with exponential backoff, honoring the server's retry-delay hint.
+   SDK-level retries are disabled so there is exactly one backoff policy.
+3. A daily-quota 429 stops the whole run (`QuotaExhausted`); auth/model errors
+   stop it too (`FatalLLMError`). Everything finished so far is already cached,
+   so re-running the same command resumes where it stopped.
+4. Unparseable output and responses that fail local validation are re-sent up
+   to `llm_max_attempts` times with the validation error appended.
+5. After that the request is reported as failed. Nothing is fabricated.
+
+Each successful response is written to the cache as soon as it arrives.
 """
 
 from __future__ import annotations
 
 import logging
+import re
+import threading
+import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
+from langchain_core.exceptions import (
+    ModelAPIError,
+    ModelAuthenticationError,
+    ModelConnectionError,
+    ModelNotFoundError,
+    ModelPermissionDeniedError,
+    ModelRateLimitError,
+    ModelTimeoutError,
+)
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
 
 from .cache import ResponseCache, cache_key
-from .config import PRICING_USD_PER_MTOK, Settings
+from .config import Settings
 
 log = logging.getLogger(__name__)
 
 Validator = Callable[[BaseModel], None]  # raises ValueError with a readable message
 
+TRANSIENT_ERRORS = (ModelRateLimitError, ModelAPIError, ModelConnectionError, ModelTimeoutError,
+                    TimeoutError, ConnectionError)
+FATAL_ERRORS = (ModelAuthenticationError, ModelPermissionDeniedError, ModelNotFoundError)
+# Gemini puts the suggested wait in the 429 body: "'retryDelay': '23s'" or "Please retry in 23.5s".
+_RETRY_HINT = re.compile(r"retry(?:Delay['\"]?:\s*['\"]|\s+in\s+)(\d+(?:\.\d+)?)s", re.IGNORECASE)
+
+
+class QuotaExhausted(RuntimeError):
+    """The provider's daily quota is used up; re-run later to resume from the cache."""
+
+
+class FatalLLMError(RuntimeError):
+    """An error no retry can fix (bad API key, no access, unknown model)."""
+
+
+def is_daily_quota(exc: BaseException) -> bool:
+    return isinstance(exc, ModelRateLimitError) and "PerDay" in str(exc)
+
+
+def retry_hint_seconds(exc: BaseException) -> float | None:
+    m = _RETRY_HINT.search(str(exc))
+    return float(m.group(1)) if m else None
+
 
 def make_chat_model(settings: Settings) -> BaseChatModel:
-    temperature = settings.effective_temperature()
-    common: dict = {"model": settings.llm_model, "max_tokens": settings.budget.output_reserve,
-                    "max_retries": 4, "timeout": settings.llm_timeout_s}
-    if temperature is not None:
-        common["temperature"] = temperature
-    if settings.llm_provider == "anthropic":
-        from langchain_anthropic import ChatAnthropic
+    common: dict = {"model": settings.llm_model, "temperature": settings.llm_temperature,
+                    "max_tokens": settings.budget.output_reserve, "timeout": settings.llm_timeout_s}
+    if settings.llm_provider == "google_genai":
+        from langchain_google_genai import ChatGoogleGenerativeAI
 
-        if settings.llm_effort:
-            common["effort"] = settings.llm_effort
-        return ChatAnthropic(**common)
-    if settings.llm_provider == "openai":
+        # max_retries=1 means "no SDK retries" in google-genai; our runner owns backoff.
+        return ChatGoogleGenerativeAI(**common, max_retries=1)
+    if settings.llm_provider == "anthropic":
         try:
-            from langchain_openai import ChatOpenAI
+            from langchain_anthropic import ChatAnthropic
         except ImportError as exc:  # optional extra
-            raise RuntimeError("Install the openai extra: uv sync --extra openai") from exc
-        return ChatOpenAI(**common)
+            raise RuntimeError("Install the anthropic extra: uv sync --extra anthropic") from exc
+        return ChatAnthropic(**common, max_retries=0)
     raise ValueError(f"unknown provider {settings.llm_provider!r}")
 
 
@@ -81,21 +120,29 @@ class UsageTotals:
     cache_hits: int = 0
     failures: int = 0
     per_stage: dict[str, dict[str, int]] = field(default_factory=dict)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
-    def add(self, stage: str, inp: int, out: int, calls: int = 1) -> None:
-        self.llm_calls += calls
-        self.input_tokens += inp
-        self.output_tokens += out
-        s = self.per_stage.setdefault(stage, {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cache_hits": 0})
-        s["calls"] += calls
-        s["input_tokens"] += inp
-        s["output_tokens"] += out
+    def _stage(self, stage: str) -> dict[str, int]:
+        return self.per_stage.setdefault(stage, {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cache_hits": 0})
 
-    def cost_usd(self, model: str) -> float | None:
-        price = PRICING_USD_PER_MTOK.get(model)
-        if price is None:
-            return None
-        return round(self.input_tokens / 1e6 * price[0] + self.output_tokens / 1e6 * price[1], 4)
+    def add_call(self, stage: str, inp: int, out: int) -> None:
+        with self._lock:
+            self.llm_calls += 1
+            self.input_tokens += inp
+            self.output_tokens += out
+            s = self._stage(stage)
+            s["calls"] += 1
+            s["input_tokens"] += inp
+            s["output_tokens"] += out
+
+    def add_cache_hit(self, stage: str) -> None:
+        with self._lock:
+            self.cache_hits += 1
+            self._stage(stage)["cache_hits"] += 1
+
+    def add_failure(self) -> None:
+        with self._lock:
+            self.failures += 1
 
 
 class StructuredRunner:
@@ -104,11 +151,13 @@ class StructuredRunner:
         self.settings = settings
         self.cache = cache
         self.usage = UsageTotals()
+        self.sleep = time.sleep  # replaced in tests
+        self._stop = threading.Event()
 
     def _key(self, req: LLMRequest) -> str:
         s = self.settings
-        return cache_key(provider=s.llm_provider, model=s.llm_model, temperature=s.effective_temperature(),
-                         effort=s.llm_effort, schema=req.schema, system=req.system, user=req.user)
+        return cache_key(provider=s.llm_provider, model=s.llm_model, temperature=s.llm_temperature,
+                         schema=req.schema, system=req.system, user=req.user)
 
     def _validate(self, req: LLMRequest, parsed: BaseModel) -> None:
         # Re-validate locally even though the provider enforced the schema.
@@ -117,57 +166,64 @@ class StructuredRunner:
             req.validator(parsed)
 
     def run(self, requests: list[LLMRequest], stage: str) -> dict[str, LLMResult]:
-        results: dict[str, LLMResult] = {}
-        pending: list[LLMRequest] = []
-        for req in requests:
-            hit = self.cache.get(self._key(req)) if self.cache else None
-            if hit is not None:
-                try:
-                    parsed = req.schema.model_validate(hit["parsed"])
-                    self._validate(req, parsed)
-                    results[req.id] = LLMResult(req.id, parsed, None, 0, True)
-                    self.usage.cache_hits += 1
-                    self.usage.per_stage.setdefault(
-                        stage, {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cache_hits": 0})["cache_hits"] += 1
-                    continue
-                except (ValidationError, ValueError) as exc:
-                    log.warning("ignoring invalid cache entry for %s: %s", req.id, exc)
-            pending.append(req)
+        with ThreadPoolExecutor(max_workers=max(1, self.settings.llm_concurrency)) as pool:
+            results = list(pool.map(lambda r: self._run_one(r, stage), requests))
+        return {r.id: r for r in results}
 
-        feedback: dict[str, str] = {}
-        tokens: dict[str, tuple[int, int]] = {}
+    def _run_one(self, req: LLMRequest, stage: str) -> LLMResult:
+        key = self._key(req)
+        hit = self.cache.get(key) if self.cache else None
+        if hit is not None:
+            try:
+                parsed = req.schema.model_validate(hit["parsed"])
+                self._validate(req, parsed)
+                self.usage.add_cache_hit(stage)
+                return LLMResult(req.id, parsed, None, 0, True)
+            except (ValidationError, ValueError) as exc:
+                log.warning("ignoring invalid cache entry for %s: %s", req.id, exc)
+
+        runnable = self.model.with_structured_output(req.schema, method="json_schema", include_raw=True)
+        feedback: str | None = None
+        total_in = total_out = 0
         for attempt in range(1, self.settings.llm_max_attempts + 1):
-            if not pending:
-                break
-            retry: list[LLMRequest] = []
-            for schema in {r.schema for r in pending}:
-                group = [r for r in pending if r.schema is schema]
-                runnable = self.model.with_structured_output(schema, method="json_schema", include_raw=True)
-                inputs = [self._messages(r, feedback.get(r.id)) for r in group]
-                log.info("%s: sending %d request(s), attempt %d", stage, len(group), attempt)
-                outputs = runnable.batch(inputs, config={"max_concurrency": self.settings.llm_concurrency},
-                                         return_exceptions=True)
-                for req, out in zip(group, outputs):
-                    inp, outp = self._record_usage(out, stage)
-                    prev = tokens.get(req.id, (0, 0))
-                    tokens[req.id] = (prev[0] + inp, prev[1] + outp)
-                    error = self._check(req, out)
-                    if error is None:
-                        parsed = out["parsed"]
-                        if self.cache:
-                            self.cache.put(self._key(req), parsed, {"input_tokens": inp, "output_tokens": outp})
-                        results[req.id] = LLMResult(req.id, parsed, None, attempt, False, *tokens[req.id])
-                    else:
-                        log.warning("%s: %s failed attempt %d: %s", stage, req.id, attempt, error)
-                        feedback[req.id] = error
-                        retry.append(req)
-            pending = retry
+            log.info("%s: %s attempt %d", stage, req.id, attempt)
+            out = self._invoke_with_backoff(runnable, self._messages(req, feedback), req.id)
+            inp, outp = self._usage_of(out)
+            self.usage.add_call(stage, inp, outp)
+            total_in, total_out = total_in + inp, total_out + outp
+            error = self._check(req, out)
+            if error is None:
+                if self.cache:
+                    self.cache.put(key, out["parsed"], {"input_tokens": inp, "output_tokens": outp})
+                return LLMResult(req.id, out["parsed"], None, attempt, False, total_in, total_out)
+            log.warning("%s: %s failed attempt %d: %s", stage, req.id, attempt, error[:500])
+            feedback = error
+        self.usage.add_failure()
+        return LLMResult(req.id, None, feedback, self.settings.llm_max_attempts, False, total_in, total_out)
 
-        for req in pending:
-            self.usage.failures += 1
-            results[req.id] = LLMResult(req.id, None, feedback.get(req.id, "unknown error"),
-                                        self.settings.llm_max_attempts, False, *tokens.get(req.id, (0, 0)))
-        return results
+    def _invoke_with_backoff(self, runnable, messages: list[BaseMessage], rid: str):
+        """Invoke once, retrying transient errors. Returns the output or a non-transient exception."""
+        s = self.settings
+        delay = s.llm_backoff_initial_s
+        for retry in range(s.llm_backoff_retries + 1):
+            if self._stop.is_set():
+                raise QuotaExhausted("stopped: the daily quota was exhausted by another request")
+            try:
+                return runnable.invoke(messages)
+            except FATAL_ERRORS as exc:
+                self._stop.set()
+                raise FatalLLMError(str(exc)) from exc
+            except Exception as exc:  # noqa: BLE001 - classified below
+                if is_daily_quota(exc):
+                    self._stop.set()
+                    raise QuotaExhausted(str(exc)) from exc
+                if not isinstance(exc, TRANSIENT_ERRORS) or retry == s.llm_backoff_retries:
+                    return exc
+                wait = min(retry_hint_seconds(exc) or delay, s.llm_backoff_max_s)
+                log.warning("%s: %s; retry %d in %.0fs", rid, type(exc).__name__, retry + 1, wait)
+                self.sleep(wait)
+                delay = min(delay * 2, s.llm_backoff_max_s)
+        raise AssertionError("unreachable")
 
     @staticmethod
     def _messages(req: LLMRequest, feedback: str | None) -> list[BaseMessage]:
@@ -177,20 +233,19 @@ class StructuredRunner:
                      f"{feedback}\nReturn a corrected, complete response.")
         return [SystemMessage(req.system), HumanMessage(user)]
 
-    def _record_usage(self, out, stage: str) -> tuple[int, int]:
+    @staticmethod
+    def _usage_of(out) -> tuple[int, int]:
         raw = out.get("raw") if isinstance(out, dict) else None
         meta = getattr(raw, "usage_metadata", None) or {}
-        inp, outp = int(meta.get("input_tokens", 0)), int(meta.get("output_tokens", 0))
-        self.usage.add(stage, inp, outp)
-        return inp, outp
+        return int(meta.get("input_tokens", 0)), int(meta.get("output_tokens", 0))
 
     def _check(self, req: LLMRequest, out) -> str | None:
         if isinstance(out, BaseException):
             return f"{type(out).__name__}: {out}"
         if out.get("parsing_error") is not None or out.get("parsed") is None:
-            raw = out.get("raw")
-            stop = (getattr(raw, "response_metadata", {}) or {}).get("stop_reason")
-            return f"unparseable structured output (stop_reason={stop}): {out.get('parsing_error')}"
+            meta = getattr(out.get("raw"), "response_metadata", {}) or {}
+            stop = meta.get("finish_reason") or meta.get("stop_reason")
+            return f"unparseable structured output (finish_reason={stop}): {out.get('parsing_error')}"
         try:
             self._validate(req, out["parsed"])
         except (ValidationError, ValueError) as exc:

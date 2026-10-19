@@ -14,3 +14,6 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 dist/
+
+# local smoke runs (the deliverable is output/analysis.json)
+output/smoke*.json

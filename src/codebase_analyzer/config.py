@@ -13,14 +13,6 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# USD per million tokens (input, output). Used only for the cost estimate in the
-# run summary; unknown models report no cost rather than a guessed one.
-PRICING_USD_PER_MTOK: dict[str, tuple[float, float]] = {
-    "claude-sonnet-5-5": (2.00, 10.00),
-    "claude-opus-5-5": (4.00, 20.00),
-    "claude-haiku-5-5": (0.10, 0.50),
-}
-
 
 class TokenBudget(BaseModel):
     """Per-request token budget.
@@ -31,7 +23,7 @@ class TokenBudget(BaseModel):
     """
 
     request_tokens: int = 32_000
-    output_reserve: int = 12_000  # also sent as max_tokens (includes model thinking)
+    output_reserve: int = 12_000  # also sent as max output tokens (includes model thinking)
     safety_margin_ratio: float = 0.10
     supporting_context_tokens: int = 2_000  # cap for referenced-type signatures
     reduce_input_tokens: int = 16_000  # cap for domain/project reduce prompts
@@ -64,14 +56,14 @@ class PackingConfig(BaseModel):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    llm_provider: Literal["anthropic", "openai"] = "anthropic"
-    llm_model: str = "claude-sonnet-5-5"
-    # Claude Sonnet 5.5 rejects non-default sampling parameters, so temperature
-    # is only sent when explicitly set or for providers that accept it.
-    llm_temperature: float | None = None
-    llm_effort: Literal["low", "medium", "high"] | None = "medium"  # Anthropic only
-    llm_concurrency: int = 4
-    llm_max_attempts: int = 3  # attempts per unit, for transient and validation failures
+    llm_provider: Literal["google_genai", "anthropic"] = "google_genai"
+    llm_model: str = "gemini-3.8-flash"
+    llm_temperature: float = 0.0
+    llm_concurrency: int = 1  # free-tier friendly; raise on a paid tier
+    llm_max_attempts: int = 3  # per request, for unparseable or locally invalid output
+    llm_backoff_initial_s: float = 10.0  # rate-limit/server-error backoff, doubled each retry
+    llm_backoff_max_s: float = 120.0
+    llm_backoff_retries: int = 8
     llm_timeout_s: float = 300.0
 
     budget: TokenBudget = Field(default_factory=TokenBudget)
@@ -79,14 +71,8 @@ class Settings(BaseSettings):
 
     cache_dir: Path = Path(".cache/llm")
     use_cache: bool = True
-    clone_dir: Path = Path("target_repo")
 
     complexity_thresholds: dict[str, int] = Field(
         default_factory=lambda: {"moderate": 6, "high": 11, "very_high": 21}
     )
     top_complex_methods: int = 10
-
-    def effective_temperature(self) -> float | None:
-        if self.llm_temperature is not None:
-            return self.llm_temperature
-        return 0.0 if self.llm_provider == "openai" else None

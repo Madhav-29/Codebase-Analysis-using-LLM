@@ -34,9 +34,9 @@ def _run(make_repo, fixture_source, responder=smart_responder, max_classes=None)
     domains, dfind = run_domain_reduce(facts, settings, runner, mo)
     det = deterministic_findings(facts, settings)
     project, pfind = run_project_reduce(facts, settings, runner, mo, domains, det)
-    meta = Metadata(repo_url=None, commit_sha=None, analyzed_at="t", prompt_version="v", llm_provider="fake",
-                    llm_model="fake", temperature=None, temperature_note=None, effort=None, token_budget_config={},
-                    packing_config={}, context_path=facts.context_path, usage=Usage(), max_classes=max_classes)
+    meta = Metadata(repo_url=None, commit_sha=None, analyzed_at="t", prompt_version="v", provider="fake",
+                    model="fake", temperature=0.0, token_budget={}, packing={}, context_path=facts.context_path,
+                    usage=Usage(), max_classes=max_classes)
     out = build_output(facts=facts, settings=settings, selected=selected, mo=mo, domains=domains, project=project,
                        findings=mo.findings + dfind + pfind + det, metadata=meta)
     return facts, out, fake
@@ -58,7 +58,7 @@ def test_full_pipeline_output_is_complete_and_labeled(make_repo, fixture_source)
     assert out.project_overview.status == "ok" and out.project_overview.source == "llm"
     assert {f.source for f in out.findings} >= {"llm"}
     # the two small DTOs from the same package were packed into one call
-    assert len(out.coverage.units_packed) == 1 and len(out.coverage.units_packed[0].classes) == 2
+    assert len(out.coverage.packs) == 1 and len(out.coverage.packs[0].classes) == 2
 
 
 def test_class_missing_from_pack_is_retried_individually(make_repo, fixture_source):
