@@ -342,7 +342,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "langchain-anthropic", marker = "extra == 'anthropic'", specifier = ">=1.7.6" },
-    { name = "langchain-core", specifier = ">=0.3" },
+    { name = "langchain-core", specifier = ">=1.6" },
     { name = "langchain-google-genai", specifier = ">=4.4.2" },
     { name = "lizard", specifier = ">=1.17" },
     { name = "pydantic", specifier = ">=2.7" },
@@ -353,7 +353,7 @@ requires-dist = [
     { name = "tree-sitter-java", specifier = ">=0.23" },
     { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["openai", "anthropic"]
+provides-extras = ["anthropic"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]
