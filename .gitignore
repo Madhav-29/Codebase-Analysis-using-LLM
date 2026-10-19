@@ -1,0 +1,16 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# analysis target and caches
+target_repo/
+.cache/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
