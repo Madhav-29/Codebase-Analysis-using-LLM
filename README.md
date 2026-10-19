@@ -2,7 +2,7 @@
 
 Structured knowledge extraction from a Java/Spring codebase with an LLM (via LangChain), within per-request token limits.
 
-The target is [codejsha/spring-rest-sakila](https://github.com/codejsha/spring-rest-sakila): a Spring Boot 3 / Java 17 REST API over MySQL's Sakila DVD-rental database (Spring Web, Data JPA, HATEOAS, REST Docs, Lombok, Querydsl, MapStruct, Actuator). The output is one JSON document with a project overview, REST endpoints, functional domains, every class and method with signatures and descriptions, complexity metrics, and noteworthy findings with file/line evidence.
+The target is [codejsha/spring-rest-sakila](https://github.com/codejsha/spring-rest-sakila): a Spring Boot 3 / Java 17 REST API over MySQL's Sakila DVD-rental database (Spring Web, Data JPA, HATEOAS, REST Docs, Lombok, Querydsl, MapStruct, Actuator). The output is one JSON document with a project overview, an index of key methods, REST endpoints, functional domains, every class and method with signatures and descriptions, complexity metrics, and noteworthy findings with file/line evidence.
 
 **Deliverables**
 
@@ -14,6 +14,21 @@ The target is [codejsha/spring-rest-sakila](https://github.com/codejsha/spring-r
 | JSON Schema of the output | [`output/analysis.schema.json`](output/analysis.schema.json) |
 
 **Core principle: facts are extracted, interpretation is generated.** Everything checkable (signatures, annotations, line ranges, endpoints, complexity, domain grouping) comes from deterministic parsing. The LLM only writes descriptions, summaries and findings, grounded in code it was shown. Every LLM-written field is labeled (`description_source`, `summary_source`, `source`).
+
+## Results at a glance
+
+Live run on 2026-10-19, 05:02–05:10 UTC, `gemini-3.5-flash-lite`, target commit `62873f7`:
+
+| | |
+|---|---|
+| LLM calls | **124**: 111 class units (incl. 33 packs) + 1 validation retry + 11 domains + 1 project. Planned: 123. |
+| Tokens | 294,867 input / 51,287 output. The class-stage input estimate was 395k vs 253k actual, so the estimate stayed conservative as designed. |
+| Failures | **0** failed units. 7 rate-limit 429s were absorbed by backoff. 1 response used a wrong type key, was rejected by validation, and was corrected on retry. |
+| Coverage | 188/188 source files, 248/248 classes summarized, **608/608 methods described**: 278 by the LLM, 330 deterministically (trivial or framework-defined), 0 undescribed. |
+| Extracted | 70 endpoints, 11 domains, 161 key methods, 100 findings (97 LLM, 3 deterministic), 0 findings dropped. |
+| Quality | Method descriptions: 10/12 factually correct in a manual review. LLM bug findings: 32/43 valid (74%). See [Evaluation](#evaluation). |
+
+The committed `output/analysis.json` was re-assembled from the response cache after two output-only fixes: adding the `key_methods` index, and mapping a leaked prompt key ("m8") back to its method name. So its `metadata.usage` shows 0 live calls and 123 cache hits, with the tokens those cached responses originally cost (288,487 / 50,575; the rejected attempt isn't cached). Diffed against the live output, only that one finding's text changed.
 
 ---
 
@@ -92,7 +107,7 @@ flowchart LR
 | `prompts.py` | Versioned prompts (`PROMPT_VERSION`). |
 | `llm.py`, `cache.py` | LangChain model, structured output, validation, retries/backoff, on-disk cache. |
 | `analyze.py` | Map → reduce orchestration; pack retry; split merge; budgeted reduce. |
-| `assemble.py`, `schema.py` | Pydantic output schema, deterministic findings, coverage assertion. |
+| `assemble.py`, `schema.py` | Pydantic output schema, deterministic findings, key-methods index, coverage assertion. |
 | `cli.py` | `estimate`, `analyze`, `validate`, `schema`. |
 
 ## Design decisions
@@ -138,8 +153,9 @@ Top-level sections (Pydantic models in `schema.py`; JSON Schema in `output/analy
 
 | Section | Content | Source |
 |---|---|---|
-| `metadata` | `repo_url`, `commit_sha`, `analyzed_at`, `schema_version`, `prompt_version`, `provider`, `model`, `temperature`, `token_budget` (incl. `input_limit`), `packing`, `context_path`, `usage` (`llm_calls`, `input_tokens`, `output_tokens`, `cache_hits`), `max_classes` | run |
+| `metadata` | `repo_url`, `commit_sha`, `analyzed_at`, `schema_version`, `prompt_version`, `provider`, `model`, `temperature` (+ `temperature_note`), `token_budget` (incl. `input_limit`), `packing`, `context_path`, `usage` (live `llm_calls`, `input_tokens`, `output_tokens`; `cache_hits` with `cached_input_tokens`/`cached_output_tokens`), `max_classes` | run |
 | `project_overview` | `purpose`, `functionality`, `architecture`, `technologies`, `cross_cutting_concerns`, `status` | LLM (reduce 2) |
+| `key_methods[]` | `id`, `class_fqn`, `signature`, `description`, `reasons` (`endpoint_handler`, `service_api`, `data_access`, `complex`), `endpoints` (e.g. `GET /api/v1/actors/{actorId}`), `cyclomatic`. This is the reading list; full facts are under `classes[].methods[]` by `id`. | selection deterministic |
 | `endpoints` | `http_method`, `path`, `controller`, `handler_method`, `file`, `line`, `security`, `unresolved` | deterministic |
 | `domains` | `name`, `summary`, `key_responsibilities`, `classes`, `endpoints`, `status` | grouping deterministic, text LLM (reduce 1) |
 | `classes[]` | `fqn`, `kind`, `domain`, `file`, line range, `modifiers`, `annotations`, `extends`, `implements`, `fields`, `enum_constants`, `framework_notes` (facts) + `summary`, `responsibilities`, `summary_source`, `analysis_unit` | mixed, labeled |
@@ -150,7 +166,7 @@ Top-level sections (Pydantic models in `schema.py`; JSON Schema in `output/analy
 
 A method id looks like `com.example.app.services.catalog.controller.ActorController#getActorFilmList(Integer,String,String,String,Pageable)@L90`. It is stable for a given commit and unique even for overloads.
 
-LLM findings are checked before acceptance. Class-level evidence lines must lie inside the file. Reduce-level evidence must cite a file that was in the prompt. Anything that fails is listed in `coverage.findings_dropped`, never silently kept.
+LLM findings are checked before acceptance. Evidence lines must lie inside the cited file, and reduce-level evidence must cite a file that was in the prompt. An LLM finding that repeats a deterministic one (same category and file) is a duplicate. Anything rejected is listed in `coverage.findings_dropped`, never silently removed.
 
 ## Complexity
 
@@ -182,7 +198,7 @@ Bands (`complexity_thresholds`): **low** CC 1–5, **moderate** 6–10, **high**
 
 **Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`) on the Gemini API free tier.**
 
-The plan was Gemini 3.8 Flash. Its free tier turned out to allow only **20 requests per day**: the second smoke run got `429 RESOURCE_EXHAUSTED … limit: 20`. The full analysis needs ~120 calls, so it switched to Flash-Lite, which has a separate free-tier quota.
+The plan was Gemini 3.8 Flash. Its free tier turned out to allow only **20 requests per day**: the second smoke run got `429 RESOURCE_EXHAUSTED … limit: 20`. The full analysis needs ~120 calls, so it switched to Flash-Lite, which has its own per-model quota. The full run of 124 calls completed within Flash-Lite's free tier on 2026-10-19, without hitting a daily limit.
 
 Comparison on the same 5 smoke-test classes:
 
@@ -191,7 +207,7 @@ Comparison on the same 5 smoke-test classes:
 | Method descriptions correct | 6/6 | 6/6 (1 omits a step: `userLogin` doesn't mention `securityService.authenticateToken`) |
 | Class-level findings | 6 (4 valid: locale-sensitive `toLowerCase()`, missing `@Valid` on the login body, constants class without a private constructor, redundant `toCollectionModel` override) | 0 |
 
-Descriptions are about as accurate, but Flash-Lite reviews much less deeply, so the findings in `analysis.json` are sparse. A paid tier with a stronger model is the obvious upgrade.
+Descriptions were about as accurate. On those 5 small classes, Flash-Lite reported no findings. On the full repository it reported 97, mostly real (see [Evaluation](#evaluation)), but with a recurring false positive that a stronger model avoided on the smoke sample. A paid tier with a stronger model is the obvious upgrade.
 
 The model is configuration (`LLM_MODEL`, `--model`), and the provider is too (`LLM_PROVIDER`). Changing either invalidates the cache automatically.
 
@@ -202,7 +218,69 @@ The model is configuration (`LLM_MODEL`, `--model`), and the provider is too (`L
 - The analyzed code is `src/main/java`. Tests are listed but not described. Build files, `application*.yaml` (secret-like values masked) and the README feed only the project overview.
 - Domains follow the package convention `com.example.app.services.<domain>...` (catalog, customer, rental, …). Packages directly under the base package (`common`, `config`) are their own groups, and the application class is `application`.
 - The README is a *claim*: where it disagrees with the extracted facts, the facts win and the mismatch is reported as a `documentation_mismatch` finding.
-- "Key methods" means every non-trivial method gets an LLM description, and trivial ones are kept but templated. Importance ranking is left to consumers (complexity, endpoints and findings are all available for that).
+- "Key methods" has two layers. Every method is listed with its signature and a description: the LLM writes it for non-trivial methods, and a template covers trivial ones. On top of that, `key_methods` is a deterministic index of the methods a reader should start with: REST endpoint handlers, the public API of `@Service` classes, custom query logic in `@Repository` classes, and anything at or above the moderate complexity threshold. Trivial members never qualify.
+
+## Evaluation
+
+All numbers are from a manual review of `output/analysis.json` against the source at commit `62873f7`. Paths are relative to `src/main/java/com/example/app/`.
+
+### Method descriptions (12 methods, 8 domains)
+
+The selection covers the most complex non-trivial methods (CC 3–5) and the longest service and repository logic.
+
+| # | Method (lines) | Domain | CC | Verdict |
+|---|---|---|---|---|
+| 1 | `common/util/ExpressionUtils.betweenExpression` (33–43) | common | 5 | ✅ All four branches (between / ≥ / ≤ / null) described correctly. |
+| 2 | `services/catalog/controller/ActorController.getActorFilmList` (90–110) | catalog | 4 | ✅ Optional filters, paging, links replaced with self + actor. |
+| 3 | `services/catalog/controller/FilmController.getFilmList` (38–52) | catalog | 4 | ✅ |
+| 4 | `services/catalog/domain/serializer/LocalDateYearSerializer.serialize` (36–49) | catalog | 4 | ✅ All three output shapes (epoch day, array, year/formatted string). |
+| 5 | `common/security/JwtAuthenticationProvider.authenticate` (19–36) | common | 3 | ⚠️ Correct but incomplete: omits that it returns `null` when the token can't be decoded. |
+| 6 | `services/location/domain/converter/GeometryConverter.convertToEntityAttribute` (21–33) | location | 3 | ❌ Says it returns `null` when parsing fails; it actually rethrows as `RuntimeException`. A class-level finding states this correctly. |
+| 7 | `services/rental/service/RentalServiceImpl.rentDvd` (63–97) | rental | 2 | ✅ Stock check, customer/staff lookup, save, payment. |
+| 8 | `services/rental/service/RentalServiceImpl.returnDvd` (99–120) | rental | 2 | ✅ |
+| 9 | `services/store/repository/custom/CustomStoreRepositoryImpl.findStoreDetail` (48–73) | store | 2 | ⚠️ Correct but shallow: omits the staff → address → city joins and the concatenated projection. |
+| 10 | `services/payment/service/PaymentServiceImpl.createPayment` (55–71) | payment | 1 | ✅ |
+| 11 | `services/staff/repository/custom/CustomStaffRepositoryImpl.findStaffDetailsById` (30–34) | staff | 1 | ✅ A finding also flags the `Optional.of(null)` NPE. |
+| 12 | `services/customer/repository/custom/CustomCustomerRepositoryImpl.findAllCustomerRentalListByIdWithCondition` (86–100) | customer | 1 | ❌ "Filtered by … rental status" describes the intent. In fact `RENTED` selects *returned* rentals (`returnDate.isNotNull()`), and `RETURNED` applies no status filter. A finding catches the inversion. |
+
+**Result: 10/12 factually correct, 8/12 correct and complete.** Both errors describe the happy path or the intent instead of edge behavior, which is the typical failure mode of a small model. In both cases a finding on the same class states the actual behavior.
+
+### Findings
+
+I reviewed all 43 medium/high `potential_bug` findings, the category where a wrong claim does the most damage:
+
+- **32 valid (74%).** Examples:
+  - `Optional.of(query.fetchFirst())` throws an NPE when nothing matches. All 8 occurrences in the code are flagged.
+  - `update()` methods assign foreign-key fields mapped `insertable = false, updatable = false`, so the change is silently not persisted.
+  - A HATEOAS assembler passes `FilmDetails.class` where the controller class belongs.
+  - `CountryDto.equals` compares a `String` with `==`.
+  - `RentalStatus.valueOf` on raw request input turns bad input into a 500.
+  - Stub repository and service methods return `null`.
+- **11 false positives.** 6 are one misconception: that `==` on an enum is unsafe. It's correct Java. The others: an assembler that *correctly* passes its controller class, `valueOf` round-tripping names that do match, a speculative claim about Sakila's schema, and two style points labeled as bugs.
+- **Severity:** of the 7 `high` findings, 4 justify it and 3 are overstated (a defensive cast, and `@GeneratedValue` on composite-key fields).
+
+The other 54 findings (low/info, and other categories) were not reviewed individually.
+
+## Best practices
+
+- **Token limits are a hard guarantee, not a hope.** Every request is planned against an explicit budget with a reserved output and a safety margin. Nothing is truncated, and splits and packs are recorded (*Token management*).
+- **Machine-readable and consistent output.**
+  - The model decodes against a JSON Schema (`with_structured_output`), and every response is re-validated locally with Pydantic.
+  - Custom validators check that exactly the requested ids came back.
+  - The final document has a versioned schema (`schema_version`, `output/analysis.schema.json`) and a `validate` command.
+- **Grounding and provenance.** Facts come from parsers. LLM text is labeled as LLM text, and findings must cite real lines. Code comments are treated as data, not instructions. The README is treated as a claim to check, not a source of truth.
+- **No fabrication, no silent loss.** A failed unit is reported, never filled in. The coverage assertion fails the run if any parsed method is missing from the output.
+- **Efficiency.**
+  - Trivial members never reach the LLM (330 of 608).
+  - Small classes share calls.
+  - Results are cached by content.
+  - Reduce stages read summaries, not code.
+- **Operability.**
+  - Rate-limit backoff honors server hints.
+  - A daily quota stops the run cleanly, and the next run resumes.
+  - Concurrency is configurable, and a pre-run estimate prints the expected calls and tokens.
+- **Security.** API keys live only in `.env`, which is gitignored and never logged. Secret-like config values are masked before they reach the LLM. The target repository is only read, never modified.
+- **Tested without network.** 43 tests cover the parser, endpoint resolution, chunking, packing, schemas, coverage, retries/backoff/quota and the full pipeline with a fake chat model.
 
 ## Limitations
 
@@ -210,7 +288,8 @@ The model is configuration (`LLM_MODEL`, `--model`), and the provider is too (`L
 - **Generated code is not analyzed.** Lombok, MapStruct and Querydsl Q-classes only exist after a build. They're noted, not described.
 - **The database layer is out of scope.** The Sakila views, stored procedures and triggers live in MySQL, not in this repository, so behavior that depends on them is invisible.
 - **README claims vs code.** Only endpoint/CRUD claims are checked deterministically. Other mismatches depend on the LLM noticing them.
-- **LLM nondeterminism.** Descriptions can vary between uncached runs even at temperature 0. They are grounded but not verified line by line; see the evaluation below for measured accuracy.
+- **LLM accuracy.** Descriptions can vary between uncached runs, and they're grounded but not verified line by line. Measured accuracy is in [Evaluation](#evaluation): 10/12 descriptions correct, and 74% precision on bug findings, with a known false-positive pattern (`==` on enums).
+- **Key-method selection is rule-based.** It relies on Spring stereotypes and complexity. A key method in a class without `@Service`/`@Repository`, such as a utility, appears only through the complexity rule or in `classes[]`.
 - **Heuristic trivial detection.** Regex over normalized bodies is conservative. A borderline method goes to the LLM rather than getting a wrong template.
 - **Free-tier data use.** On the Gemini API free tier, Google may use prompts and responses to improve its products. That's fine for this public repository, but don't send private code on the free tier: use a paid tier or another provider.
 
