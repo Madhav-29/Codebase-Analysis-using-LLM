@@ -16,7 +16,7 @@ from codebase_analyzer.llm.client import (
     effective_temperature,
     make_chat_model,
 )
-from codebase_analyzer.schema.output import ClassUnitResponse, DomainResponse
+from codebase_analyzer.schema.responses import ClassUnitResponse, DomainResponse
 
 from ..fakes import FakeStructuredModel, class_payload
 

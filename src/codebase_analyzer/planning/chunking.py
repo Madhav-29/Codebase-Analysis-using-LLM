@@ -33,7 +33,7 @@ from codebase_analyzer.prompts import (
     number_lines,
     render_class_prompt,
 )
-from codebase_analyzer.schema.output import ClassUnitResponse
+from codebase_analyzer.schema.responses import ClassUnitResponse
 from codebase_analyzer.planning.tokens import estimate_tokens
 
 MIN_PART_TOKENS = 400  # below this, a split part cannot hold meaningful code

@@ -1,4 +1,4 @@
-"""Local JSON assembly, deterministic findings, and the coverage check.
+"""Local JSON assembly and the coverage check.
 
 The output is assembled from facts first; LLM content is attached by id. The
 final `verify_coverage` asserts every parsed type and member is present exactly
@@ -7,13 +7,14 @@ once, so a bug that silently drops a method fails the run loudly.
 
 from __future__ import annotations
 
-import re
 from collections import Counter
 
-from codebase_analyzer.pipeline.map_stage import MapOutput, ReduceResult
-from codebase_analyzer.config import Settings
 from codebase_analyzer.analysis.facts import ProjectFacts
+from codebase_analyzer.analysis.key_methods import select_key_methods
 from codebase_analyzer.analysis.metrics import complexity_band
+from codebase_analyzer.config import Settings
+from codebase_analyzer.pipeline.map_stage import MapOutput
+from codebase_analyzer.pipeline.reduce_stage import ReduceResult
 from codebase_analyzer.schema.output import (
     AnalysisOutput,
     ClassOut,
@@ -23,7 +24,6 @@ from codebase_analyzer.schema.output import (
     Coverage,
     DomainOut,
     EndpointOut,
-    Evidence,
     FailedUnit,
     FindingOut,
     KeyMethod,
@@ -39,111 +39,6 @@ from codebase_analyzer.schema.output import (
 
 class CoverageError(AssertionError):
     pass
-
-
-# ------------------------------------------------------------------ deterministic findings
-
-def deterministic_findings(facts: ProjectFacts, settings: Settings) -> list[FindingOut]:
-    findings: list[FindingOut] = []
-
-    # 1. Methods at or above the "high" cyclomatic threshold; boilerplate (e.g. hand-written equals) reported apart.
-    high = settings.complexity_thresholds["high"]
-    complex_members = [(t, mf) for t in facts.types.values() for mf in t.members
-                       if mf.complexity and mf.complexity.cyclomatic >= high]
-    for trivial in (False, True):
-        group = [(t, mf) for t, mf in complex_members if bool(mf.deterministic and mf.deterministic.trivial) == trivial]
-        if not group:
-            continue
-        names = ", ".join(f"{t.decl.name}.{mf.member.name} (CC {mf.complexity.cyclomatic})" for t, mf in group)
-        findings.append(FindingOut(
-            category="maintainability", severity="info" if trivial else "low",
-            title=(f"{len(group)} boilerplate method(s) with cyclomatic complexity >= {high}" if trivial
-                   else f"{len(group)} method(s) with cyclomatic complexity >= {high}"),
-            detail=f"Measured by lizard: {names}." + (
-                " These are hand-written equals/hashCode-style members classified as boilerplate, not business logic."
-                if trivial else ""),
-            scope="project",
-            evidence=[Evidence(file=t.file.path, line_start=mf.member.line_start, line_end=mf.member.line_end)
-                      for t, mf in group],
-            source="deterministic"))
-
-    # 2. README endpoint claims vs. resolved controller mappings.
-    readme = next((f for f in facts.inventory.by_category("readme")), None)
-    if readme and facts.endpoints:
-        text = facts.inventory.read(readme.path)
-        base = facts.context_path.rstrip("/")
-        # evidence: the README lines mentioning the API base path (its endpoint list), else the whole file
-        cited = [n for n, line in enumerate(text.splitlines(), start=1) if base and base in line]
-        readme_evidence = [Evidence(file=readme.path, line_start=min(cited, default=1),
-                                    line_end=max(cited, default=text.count("\n") + 1))]
-        claimed = {m.group(1) for m in re.finditer(re.escape(base) + r"/([A-Za-z0-9_-]+)", text)} if base else set()
-        resources: dict[str, set[str]] = {}
-        for e in facts.endpoints:
-            seg = e.path[len(base):].strip("/").split("/", 1)[0]
-            resources.setdefault(seg, set()).add(e.http_method)
-        provided_by_framework = {"actuator"}  # Spring Boot Actuator, not a controller
-        not_in_code = sorted(claimed - set(resources) - provided_by_framework)
-        not_in_readme = sorted(set(resources) - claimed)
-        if not_in_code or not_in_readme:
-            detail = []
-            if not_in_code:
-                detail.append(f"README lists {', '.join(base + '/' + r for r in not_in_code)} but no controller maps them.")
-            if not_in_readme:
-                detail.append(f"Controllers map {', '.join(base + '/' + r for r in not_in_readme)} which the README does not list.")
-            findings.append(FindingOut(
-                category="documentation_mismatch", severity="low", title="README endpoint list differs from controller mappings",
-                detail=" ".join(detail), scope="project",
-                evidence=readme_evidence, source="deterministic"))
-        if "CRUD" in text:
-            crud = {"GET", "POST", "PUT", "DELETE"}
-            partial = {r: sorted(crud - verbs) for r, verbs in resources.items() if crud - verbs and r in claimed}
-            if partial:
-                findings.append(FindingOut(
-                    category="documentation_mismatch", severity="info",
-                    title="README claims CRUD support; some listed resources lack HTTP verbs",
-                    detail="Missing verbs per resource (from mappings): "
-                           + "; ".join(f"{base}/{r}: {', '.join(v)}" for r, v in sorted(partial.items())) + ".",
-                    scope="project",
-                    evidence=readme_evidence,
-                    source="deterministic"))
-    return findings
-
-
-# ------------------------------------------------------------------ key methods
-
-KEY_REASONS = {
-    "endpoint_handler": "handles a REST endpoint",
-    "service_api": "public method of a @Service class",
-    "data_access": "custom query logic in a @Repository class",
-    "complex": "cyclomatic complexity at or above the moderate threshold",
-}
-
-
-def key_methods(facts: ProjectFacts, classes: list[ClassOut], settings: Settings) -> list[KeyMethod]:
-    """Deterministic selection of the methods a reader should look at first. Trivial members never qualify."""
-    routes: dict[tuple[str, int], list[str]] = {}
-    for e in facts.endpoints:
-        routes.setdefault((e.controller, e.line), []).append(f"{e.http_method} {e.path}")
-    moderate = settings.complexity_thresholds["moderate"]
-    result = []
-    for c in classes:
-        stereotypes = {a.name for a in facts.types[c.fqn].decl.annotations}
-        for m in c.methods:
-            if m.trivial or not m.has_body:
-                continue
-            eps = routes.get((c.fqn, m.line_start), [])
-            public = "public" in m.modifiers
-            reasons = [r for r, hit in (
-                ("endpoint_handler", bool(eps)),
-                ("service_api", public and "Service" in stereotypes),
-                ("data_access", public and "Repository" in stereotypes),
-                ("complex", bool(m.complexity and m.complexity.cyclomatic >= moderate)),
-            ) if hit]
-            if reasons:
-                result.append(KeyMethod(id=m.id, class_fqn=c.fqn, signature=m.signature, description=m.description,
-                                        description_source=m.description_source, reasons=reasons, endpoints=eps,
-                                        cyclomatic=m.complexity.cyclomatic if m.complexity else None))
-    return result
 
 
 # ------------------------------------------------------------------ assembly
@@ -182,6 +77,18 @@ def _complexity_summary(facts: ProjectFacts, settings: Settings) -> ComplexitySu
             "Methods of anonymous classes inside a member are not folded into that member's complexity.",
         ],
     )
+
+
+def _key_methods(facts: ProjectFacts, classes: list[ClassOut], settings: Settings) -> list[KeyMethod]:
+    methods = {m.id: m for c in classes for m in c.methods}
+    result = []
+    for k in select_key_methods(facts, settings):
+        m = methods[k.member_id]
+        result.append(KeyMethod(id=m.id, class_fqn=k.class_fqn, signature=m.signature, description=m.description,
+                                description_source=m.description_source, reasons=list(k.reasons),
+                                endpoints=list(k.endpoints),
+                                cyclomatic=m.complexity.cyclomatic if m.complexity else None))
+    return result
 
 
 def build_output(*, facts: ProjectFacts, settings: Settings, selected: list[str], mo: MapOutput,
@@ -281,7 +188,7 @@ def build_output(*, facts: ProjectFacts, settings: Settings, selected: list[str]
     )
 
     output = AnalysisOutput(
-        metadata=metadata, project_overview=overview, key_methods=key_methods(facts, classes, settings),
+        metadata=metadata, project_overview=overview, key_methods=_key_methods(facts, classes, settings),
         endpoints=[EndpointOut(http_method=e.http_method, path=e.path, controller=e.controller,
                                handler_method=e.handler_method, file=e.file, line=e.line,
                                security=list(e.security), unresolved=e.unresolved) for e in facts.endpoints],

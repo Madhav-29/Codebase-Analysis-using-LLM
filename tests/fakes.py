@@ -14,7 +14,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 from pydantic import ValidationError
 
-from codebase_analyzer.schema.output import ClassUnitResponse, DomainResponse, ProjectResponse
+from codebase_analyzer.schema.responses import ClassUnitResponse, DomainResponse, ProjectResponse
 
 TYPE_LINE = re.compile(r"^- (\S+) \((\w+), lines (\d+)-(\d+)\)$", re.M)
 MEMBER_LINE = re.compile(r"^- (m\d+) in (\S+): ", re.M)

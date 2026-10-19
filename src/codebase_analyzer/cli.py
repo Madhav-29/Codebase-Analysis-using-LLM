@@ -19,8 +19,10 @@ from typing import Annotated, Optional
 import typer
 from dotenv import load_dotenv
 
-from codebase_analyzer.pipeline.map_stage import run_domain_reduce, run_map, run_project_reduce, select_paths
-from codebase_analyzer.pipeline.assemble import build_output, deterministic_findings, verify_coverage
+from codebase_analyzer.analysis.checks import deterministic_findings
+from codebase_analyzer.pipeline.assemble import build_output, verify_coverage
+from codebase_analyzer.pipeline.map_stage import run_map, select_paths
+from codebase_analyzer.pipeline.reduce_stage import run_domain_reduce, run_project_reduce
 from codebase_analyzer.llm.cache import ResponseCache
 from codebase_analyzer.planning.chunking import Plan, plan_units
 from codebase_analyzer.config import Settings, TokenBudget
