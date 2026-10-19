@@ -42,10 +42,12 @@ Requirements: Python 3.11+, [uv](https://docs.astral.sh/uv/), git. No Java, Grad
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"   # install uv
 git clone <this repo> codebase-analyzer; cd codebase-analyzer
 uv sync
-git clone https://github.com/codejsha/spring-rest-sakila target_repo
+git -c core.longpaths=true clone https://github.com/codejsha/spring-rest-sakila target_repo   # deep package paths
 git -C target_repo checkout 62873f7bb8a06681f299f8bd209cb88089e9be04   # the commit analyzed in output/
 Copy-Item .env.example .env    # then edit .env and set GOOGLE_API_KEY
 ```
+
+If Windows Smart App Control blocks the generated `codebase-analyzer.exe` shim, run the same commands as `uv run python -m codebase_analyzer <command> ...`.
 
 **macOS / Linux**
 
