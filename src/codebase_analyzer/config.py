@@ -56,9 +56,12 @@ class PackingConfig(BaseModel):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    llm_provider: Literal["google_genai", "anthropic"] = "google_genai"
-    llm_model: str = "gemini-3.5-flash-lite"
-    llm_temperature: float = 0.0
+    llm_provider: Literal["google_genai", "azure_foundry", "anthropic"] = "google_genai"
+    llm_model: str = "gemini-3.5-flash-lite"  # model id, or the deployment name on Azure
+    llm_temperature: float = 0.0  # sent only to models that accept sampling parameters
+    # sent only to reasoning models (azure_foundry)
+    llm_reasoning_effort: Literal["none", "minimal", "low", "medium", "high"] = "low"
+    azure_ai_endpoint: str | None = None  # https://<resource>.services.ai.azure.com/openai/v1
     llm_concurrency: int | None = None  # None: the provider's default (see llm/providers)
     llm_max_attempts: int = 3  # per request, for unparseable or locally invalid output
     llm_backoff_initial_s: float = 10.0  # rate-limit/server-error backoff, doubled each retry

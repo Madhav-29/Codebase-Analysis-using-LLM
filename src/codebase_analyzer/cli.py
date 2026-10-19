@@ -112,11 +112,12 @@ def _print_plan(facts: ProjectFacts, s: Settings, selected: list[str], plan: Pla
         f"Estimated tokens: input ~{est_in + reduce_in:,} (class {est_in:,}, conservative), "
         f"visible output ~{visible_out + reduce_out:,} (+ model thinking)"
     )
+    typer.echo("Cost: token counts only; prices are not included or estimated")
 
 
 RepoOpt = Annotated[Path, typer.Option("--repo", help="Local path of the target repository (a git checkout).")]
 ProviderOpt = Annotated[
-    str | None, typer.Option("--provider", help="google_genai | anthropic (default: LLM_PROVIDER).")
+    str | None, typer.Option("--provider", help="google_genai | azure_foundry | anthropic (default: LLM_PROVIDER).")
 ]
 ModelOpt = Annotated[str | None, typer.Option("--model", help="Model or deployment name (default: LLM_MODEL).")]
 MaxOpt = Annotated[
@@ -242,7 +243,10 @@ def analyze(
     )
     typer.echo(
         f"LLM calls: {u.llm_calls}  cache hits: {u.cache_hits}  tokens in/out: {u.input_tokens:,}/{u.output_tokens:,}"
+        f" (reasoning {u.reasoning_tokens:,})  price: not included"
     )
+    if u.served_models:
+        typer.echo(f"Served model(s): {', '.join(sorted(u.served_models))}")
     for stage, st in u.per_stage.items():
         typer.echo(f"  {stage}: {st}")
     for f in c.units_failed:

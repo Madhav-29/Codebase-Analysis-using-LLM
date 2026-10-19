@@ -38,7 +38,13 @@ class FakeStructuredModel:
                 raise payload
             raw = AIMessage(
                 content=json.dumps(payload),
-                usage_metadata={"input_tokens": 100, "output_tokens": 40, "total_tokens": 140},
+                usage_metadata={
+                    "input_tokens": 100,
+                    "output_tokens": 40,
+                    "total_tokens": 140,
+                    "output_token_details": {"reasoning": 8},
+                },
+                response_metadata={"model_name": "fake-model-2026-01-01"},
             )
             try:
                 return {"raw": raw, "parsed": schema.model_validate(payload), "parsing_error": None}

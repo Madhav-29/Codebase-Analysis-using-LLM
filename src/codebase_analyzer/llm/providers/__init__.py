@@ -2,9 +2,9 @@
 
 Each provider module turns `Settings` into a ready LangChain chat model plus the
 provider-specific facts the rest of the pipeline needs (what is actually sent
-for sampling, extra structured-output arguments, a sensible concurrency).
-Optional providers are imported lazily, so a missing extra is a clear
-ConfigError instead of an ImportError at startup.
+for sampling and reasoning, extra structured-output arguments, a concurrency
+that fits the provider's rate limits). Optional providers are imported lazily,
+so a missing extra is a clear ConfigError instead of an ImportError at startup.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ class Provider:
     temperature_note: str | None  # why temperature is not sent, recorded in output metadata
     concurrency: int
     structured_output: dict[str, Any] = field(default_factory=lambda: {"method": "json_schema"})
+    reasoning_effort: str | None = None  # sent to reasoning models; part of the cache key when set
 
 
 def make_provider(settings: Settings) -> Provider:
@@ -33,6 +34,12 @@ def make_provider(settings: Settings) -> Provider:
         from codebase_analyzer.llm.providers import google_genai
 
         return google_genai.make(settings)
+    if settings.llm_provider == "azure_foundry":
+        try:
+            from codebase_analyzer.llm.providers import azure_foundry
+        except ImportError as exc:
+            raise ConfigError("The azure_foundry provider needs its extra: uv sync --extra azure") from exc
+        return azure_foundry.make(settings)
     if settings.llm_provider == "anthropic":
         try:
             from codebase_analyzer.llm.providers import anthropic

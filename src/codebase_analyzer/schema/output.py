@@ -8,23 +8,26 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from codebase_analyzer.schema.responses import CrossCuttingConcern
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"  # 1.1: reasoning tokens, reasoning effort, served model versions (additive)
 
 
 class Usage(BaseModel):
     """llm_calls/input_tokens/output_tokens are live calls in this run; cache_hits were replayed from the
-    response cache, and cached_*_tokens is what those responses cost when they were originally produced."""
+    response cache, and cached_*_tokens is what those responses cost when they were originally produced.
+    output tokens include reasoning tokens. Token counts only: prices are deliberately not estimated."""
 
     llm_calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
+    reasoning_tokens: int = 0
     cache_hits: int = 0
     cached_input_tokens: int = 0
     cached_output_tokens: int = 0
+    cached_reasoning_tokens: int = 0
 
 
 class Metadata(BaseModel):
@@ -34,9 +37,11 @@ class Metadata(BaseModel):
     schema_version: str = SCHEMA_VERSION
     prompt_version: str
     provider: str
-    model: str
-    temperature: float | None  # None: the model uses fixed sampling and ignores it
+    model: str  # model id, or the deployment name on Azure
+    served_models: list[str] = Field(default_factory=list)  # model versions the provider reported
+    temperature: float | None  # None: not sent (fixed-sampling or reasoning model)
     temperature_note: str | None
+    reasoning_effort: str | None = None
     token_budget: dict[str, Any]
     packing: dict[str, Any]
     context_path: str

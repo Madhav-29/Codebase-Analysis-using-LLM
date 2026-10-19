@@ -24,6 +24,9 @@ dependencies = [
 anthropic = [
     "langchain-anthropic>=1.7.6",
 ]
+azure = [
+    "langchain-azure-ai>=1.2.10",
+]
 
 [project.urls]
 Repository = "https://github.com/Madhav-29/codebase-analysis-using-llm"
@@ -68,7 +71,7 @@ files = ["src"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["lizard", "tree_sitter_java"]
+module = ["lizard", "tree_sitter_java", "langchain_azure_ai.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

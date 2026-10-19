@@ -1,10 +1,14 @@
-"""On-disk cache of validated LLM responses.
+"""On-disk, content-addressed cache of validated LLM responses.
 
 Key = sha256 over everything that can change the answer: prompt version,
-provider, model, temperature, output schema, system prompt and the
-full user prompt (which already contains the unit's code and supporting
-context). Changing any of them is a cache miss; re-running an unchanged
-analysis replays identical output, which is also how runs are reproducible.
+provider, model, sampling/reasoning settings, the response JSON Schema (stricter
+than a schema version), the system prompt and the full user prompt (which
+contains the unit's code and supporting context). Changing any of them is a
+cache miss; re-running an unchanged analysis replays identical output.
+
+Settings that are not in effect (e.g. reasoning effort for a non-reasoning
+model) are left out of the key, so adding a knob does not invalidate entries
+written before it existed.
 """
 
 from __future__ import annotations
@@ -26,20 +30,20 @@ def cache_key(
     schema: type[BaseModel],
     system: str,
     user: str,
+    reasoning_effort: str | None = None,
 ) -> str:
-    payload = json.dumps(
-        {
-            "prompt_version": prompt_version,
-            "provider": provider,
-            "model": model,
-            "temperature": temperature,
-            "schema": schema.model_json_schema(),
-            "system": system,
-            "user": user,
-        },
-        sort_keys=True,
-    )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    payload: dict[str, Any] = {
+        "prompt_version": prompt_version,
+        "provider": provider,
+        "model": model,
+        "temperature": temperature,
+        "schema": schema.model_json_schema(),
+        "system": system,
+        "user": user,
+    }
+    if reasoning_effort is not None:
+        payload["reasoning_effort"] = reasoning_effort
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
 class ResponseCache:
@@ -56,9 +60,10 @@ class ResponseCache:
             return None
         return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
-    def put(self, key: str, parsed: BaseModel, usage: dict[str, int]) -> None:
+    def put(self, key: str, parsed: BaseModel, usage: dict[str, int], served_model: str | None = None) -> None:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
+        entry = {"parsed": parsed.model_dump(), "usage": usage, "served_model": served_model}
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"parsed": parsed.model_dump(), "usage": usage}, indent=1), encoding="utf-8")
+        tmp.write_text(json.dumps(entry, indent=1), encoding="utf-8")
         tmp.replace(path)  # atomic: a crashed run never leaves a half-written entry
