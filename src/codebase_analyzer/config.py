@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # USD per million tokens (input, output). Used only for the cost estimate in the
@@ -41,6 +41,15 @@ class TokenBudget(BaseModel):
     def input_limit(self) -> int:
         margin = int(self.request_tokens * self.safety_margin_ratio)
         return self.request_tokens - self.output_reserve - margin
+
+    @model_validator(mode="after")
+    def _check_room_for_input(self) -> TokenBudget:
+        if self.input_limit < 1_000:
+            raise ValueError(
+                f"request_tokens={self.request_tokens} leaves only {self.input_limit} input tokens after "
+                f"output_reserve={self.output_reserve} and the safety margin; raise request_tokens or lower output_reserve"
+            )
+        return self
 
 
 class PackingConfig(BaseModel):
